@@ -60,7 +60,7 @@ function Avatar() {
     <Svg viewBox="0 0 64 64" width={64} height={64}>
       <Circle cx={32} cy={32} r={31} fill={colors.accent} stroke="#fff" strokeWidth={3} />
       <Circle cx={32} cy={26} r={10} fill="#fde68a" />
-      <Path d="M12 56c2-14 12-18 20-18s18 4 20 18z" fill={colors.track} />
+      <Path d="M12 56c2-14 12-18 20-18s18 4 20 18z" fill="#1e293b" />
       <Path d="M26 40l6 8 6-8z" fill="#fff" />
     </Svg>
   );
@@ -91,9 +91,11 @@ function BubbleButton({
 const styles = StyleSheet.create({
   root: {
     position: "absolute",
+    top: 16,
     right: 16,
-    bottom: 16,
     maxWidth: 448,
+    // Button stays at the top; the tip bubble opens below it.
+    flexDirection: "column-reverse",
     alignItems: "flex-end",
     gap: 12,
   },

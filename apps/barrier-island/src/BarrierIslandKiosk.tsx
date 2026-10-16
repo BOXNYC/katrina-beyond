@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import barrierIsland, {
   effectiveSurgeFt,
   marshCompromised,
@@ -10,12 +9,20 @@ import barrierIsland, {
   type Levels,
   type ModifierId,
 } from "./lib/barrierIsland";
-import CrossSection from "./components/CrossSection";
+import Controls from "./components/Controls";
 import HelpAgent from "./components/HelpAgent";
-import LevelSlider from "./components/LevelSlider";
+import Scene, { STAGE_H, STAGE_W } from "./components/Scene";
 import { colors } from "./theme";
 
-const { severities, modifiers, levelLabels } = barrierIsland;
+const { severities } = barrierIsland;
+
+/** The painting as drawn: every defense in place. Shown before play begins. */
+/** Stage units of empty sand at the bottom that can be cropped off. */
+const SAND_CROP = 200;
+/** Stage units of height the tallest message (the result screen) needs. */
+const SKY_NEEDS = 440;
+
+const FULL_DEFENSES: Levels = { barrierIsland: 2, marsh: 2, ridge: 2, levee: 2 };
 
 type Phase = "idle" | "storm" | "configure" | "simulating" | "result";
 type State = { phase: Phase; severityId: string; levels: Levels };
@@ -27,7 +34,7 @@ const tips = {
     "A bigger storm pushes more water. Next you will choose the defenses that slow it down.",
   ],
   configure: [
-    "Try one slider at a time and watch the picture change.",
+    "Try one control at a time and watch the picture change.",
     "Marsh is the hero. Its grass soaks up water and slows the surge.",
     "Marsh needs a barrier island. Without the island, waves wash the marsh away.",
     "No single wall can stop a big storm. Natural and built defenses work best together.",
@@ -45,6 +52,18 @@ const tips = {
 } as const;
 
 export default function BarrierIslandKiosk() {
+  const { width, height } = useWindowDimensions();
+  // The artboard fills the width and sits near the bottom edge. The empty sand
+  // under the controls is cropped so short (landscape phone) screens get more
+  // sky; any extra height on tall screens is plain sky.
+  const s = width / STAGE_W;
+  const stageH = STAGE_H * s;
+  const crop = SAND_CROP * s;
+  const horizonY = height + crop - stageH + 560 * s;
+  const skyH = Math.max(horizonY - 24 * s, 0);
+  // Type scale: readable on small screens, but never taller than the sky.
+  const u = Math.min(Math.max(s, 0.5), skyH / SKY_NEEDS);
+
   const [state, setState] = useState<State>(() => ({
     phase: "idle",
     severityId: severities[0].id,
@@ -53,13 +72,13 @@ export default function BarrierIslandKiosk() {
   const visit = useRef(0);
 
   const { phase, severityId, levels } = state;
-  const severity = severities.find((s) => s.id === severityId) ?? severities[0];
+  const severity = severities.find((x) => x.id === severityId) ?? severities[0];
 
   const reset = useCallback(
     () =>
-      setState((s) => ({
+      setState((st) => ({
         phase: "idle",
-        severityId: s.severityId,
+        severityId: st.severityId,
         levels: neutralLevels(),
       })),
     [],
@@ -77,7 +96,7 @@ export default function BarrierIslandKiosk() {
   useEffect(() => {
     if (phase !== "simulating") return;
     const t = setTimeout(
-      () => setState((s) => ({ ...s, phase: "result" })),
+      () => setState((st) => ({ ...st, phase: "result" })),
       barrierIsland.simulationMs,
     );
     return () => clearTimeout(t);
@@ -89,15 +108,16 @@ export default function BarrierIslandKiosk() {
   };
 
   const setLevel = (id: ModifierId, level: Level) =>
-    setState((s) => ({ ...s, levels: { ...s.levels, [id]: level } }));
+    setState((st) => ({ ...st, levels: { ...st.levels, [id]: level } }));
 
-  const goto = (next: Phase) => setState((s) => ({ ...s, phase: next }));
+  const goto = (next: Phase) => setState((st) => ({ ...st, phase: next }));
 
   const ft = effectiveSurgeFt(severityId, levels);
   const outcome = outcomeFor(ft);
+  const controlsShown = phase === "configure" || phase === "simulating";
 
   return (
-    <SafeAreaView
+    <View
       style={styles.root}
       // Observe touches for the inactivity timer without claiming them.
       onStartShouldSetResponderCapture={() => {
@@ -105,108 +125,122 @@ export default function BarrierIslandKiosk() {
         return false;
       }}
     >
-      {phase === "idle" && (
-        <Pressable onPress={wake} style={styles.center} accessibilityRole="button">
-          <Text style={[styles.title, { fontSize: 56 }]}>Barrier Island</Text>
-          <Pulse>
-            <Text style={styles.prompt}>Touch to begin</Text>
-          </Pulse>
-        </Pressable>
-      )}
+      <View style={{ position: "absolute", left: 0, bottom: -crop, width, height: stageH }}>
+        <Scene levels={controlsShown || phase === "result" ? levels : FULL_DEFENSES} s={s} />
+        {controlsShown && (
+          <Controls s={s} levels={levels} disabled={phase === "simulating"} onChange={setLevel} />
+        )}
+      </View>
 
-      {phase === "storm" && (
-        <View style={styles.center}>
-          <Text style={styles.eyebrow}>Storm warning</Text>
-          <Text style={[styles.title, { fontSize: 40, maxWidth: 700 }]}>
-            A {severity.label} is approaching.
-          </Text>
-          <Text style={styles.lead}>
-            Expected storm surge: {severity.surgeFt} ft · {severity.wind}
-          </Text>
-          <Text style={[styles.body, { maxWidth: 600 }]}>
-            Choose how to protect the island, then simulate the storm.
-          </Text>
-          <PrimaryButton onPress={() => goto("configure")}>Prepare the island</PrimaryButton>
-        </View>
-      )}
+      {/* Messages live in the sky, above the horizon. */}
+      <View style={[styles.sky, { height: skyH, paddingHorizontal: Math.min(width * 0.2, 200) }]} pointerEvents="box-none">
+        {phase === "idle" && (
+          <Pressable onPress={wake} style={styles.fill} accessibilityRole="button">
+            <Text style={[styles.title, { fontSize: 88 * u }]}>Barrier Island</Text>
+            <Pulse>
+              <Text style={[styles.prompt, { fontSize: 34 * u }]}>Touch to begin</Text>
+            </Pulse>
+          </Pressable>
+        )}
 
-      {(phase === "configure" || phase === "simulating") && (
-        <ScrollView contentContainerStyle={styles.configure}>
-          <Text style={[styles.title, { fontSize: 28, textAlign: "left" }]}>
-            {severity.label} · {severity.surgeFt} ft surge
-          </Text>
-          <CrossSection levels={levels} />
-          {modifiers.map((m) => (
-            <View key={m.id} style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {m.hero ? "⭐ " : ""}
-                {m.label}
-              </Text>
-              <Text style={styles.cardText}>{m.description}</Text>
-              {m.id === "marsh" && marshCompromised(levels) && (
-                <Text style={styles.note}>{barrierIsland.marshNote}</Text>
-              )}
-              <View style={{ marginTop: 12 }}>
-                <LevelSlider
-                  label={m.label}
-                  value={levels[m.id]}
-                  labels={levelLabels}
-                  disabled={phase === "simulating"}
-                  onChange={(l) => setLevel(m.id, l)}
-                />
-              </View>
-            </View>
-          ))}
-          <View style={{ alignItems: "center", marginTop: 8 }}>
-            {phase === "configure" ? (
-              <PrimaryButton onPress={() => goto("simulating")}>Simulate</PrimaryButton>
-            ) : (
-              <Pulse>
-                <Text style={styles.prompt}>Storm surge arriving — watch the model…</Text>
-              </Pulse>
+        {phase === "storm" && (
+          <View style={styles.fill}>
+            <Text style={[styles.eyebrow, { fontSize: 24 * u }]}>Storm warning</Text>
+            <Text style={[styles.title, { fontSize: 64 * u }]}>
+              A {severity.label} is approaching.
+            </Text>
+            <Text style={[styles.lead, { fontSize: 32 * u }]}>
+              Expected storm surge: {severity.surgeFt} ft · {severity.wind}
+            </Text>
+            <PrimaryButton u={u} onPress={() => goto("configure")}>
+              Prepare the island
+            </PrimaryButton>
+          </View>
+        )}
+
+        {phase === "configure" && (
+          <View style={styles.fill}>
+            <Text style={[styles.lead, { fontSize: 32 * u }]}>
+              {severity.label} · {severity.surgeFt} ft surge
+            </Text>
+            {marshCompromised(levels) && (
+              <Text style={[styles.note, { fontSize: 24 * u }]}>{barrierIsland.marshNote}</Text>
             )}
+            <PrimaryButton u={u} onPress={() => goto("simulating")}>
+              Simulate
+            </PrimaryButton>
           </View>
-          {/* Room so the help agent never covers the last control. */}
-          <View style={{ height: 96 }} />
-        </ScrollView>
-      )}
+        )}
 
-      {phase === "result" && (
-        <View style={styles.center}>
-          <Text style={[styles.title, { fontSize: 40 }]}>{outcome.title}</Text>
-          <Text style={[styles.lead, { maxWidth: 600 }]}>{outcome.text}</Text>
-          <Text style={styles.prompt}>
-            {severity.surgeFt} ft of surge → {ft.toFixed(1)} ft reached the community
-          </Text>
-          <View style={styles.row}>
-            <PrimaryButton onPress={() => goto("configure")}>Try different defenses</PrimaryButton>
-            <Pressable onPress={reset} style={styles.secondary} accessibilityRole="button">
-              <Text style={styles.secondaryText}>Done</Text>
-            </Pressable>
+        {phase === "simulating" && (
+          <View style={styles.fill}>
+            <Pulse>
+              <Text style={[styles.prompt, { fontSize: 34 * u }]}>
+                Storm surge arriving — watch the model…
+              </Text>
+            </Pulse>
           </View>
-        </View>
-      )}
+        )}
+
+        {phase === "result" && (
+          <View style={styles.fill}>
+            <Text style={[styles.title, { fontSize: 56 * u }]}>{outcome.title}</Text>
+            <Text style={[styles.lead, { fontSize: 28 * u }]}>{outcome.text}</Text>
+            <Text style={[styles.prompt, { fontSize: 26 * u }]}>
+              {severity.surgeFt} ft of surge → {ft.toFixed(1)} ft reached the community
+            </Text>
+            <View style={styles.row}>
+              <PrimaryButton u={u} onPress={() => goto("configure")}>
+                Try different defenses
+              </PrimaryButton>
+              <PrimaryButton u={u} secondary onPress={reset}>
+                Done
+              </PrimaryButton>
+            </View>
+          </View>
+        )}
+      </View>
 
       {phase !== "idle" && <HelpAgent key={phase} tips={[...tips[phase]]} />}
-    </SafeAreaView>
+    </View>
   );
 }
 
-function PrimaryButton({ children, onPress }: { children: string; onPress: () => void }) {
+function PrimaryButton({
+  children,
+  onPress,
+  u,
+  secondary,
+}: {
+  children: string;
+  onPress: () => void;
+  u: number;
+  secondary?: boolean;
+}) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.primary, pressed && { backgroundColor: "#38bdf8" }]}
+      style={({ pressed }) => [
+        styles.button,
+        {
+          height: 72 * u,
+          paddingHorizontal: 52 * u,
+          backgroundColor: secondary ? "#fff" : colors.control,
+          opacity: pressed ? 0.8 : 1,
+        },
+      ]}
     >
-      <Text style={styles.primaryText}>{children}</Text>
+      <Text style={{ fontSize: 28 * u, fontWeight: "700", color: secondary ? colors.control : "#fff" }}>
+        {children}
+      </Text>
     </Pressable>
   );
 }
 
-/** Gentle opacity pulse, like Tailwind's animate-pulse. */
+/** Gentle opacity pulse. */
 function Pulse({ children }: { children: ReactNode }) {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const [opacity] = useState(() => new Animated.Value(1));
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -221,38 +255,14 @@ function Pulse({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 24, padding: 32 },
-  configure: { padding: 24, gap: 16 },
-  title: { color: colors.text, fontWeight: "600", textAlign: "center" },
-  eyebrow: {
-    color: colors.sky,
-    fontSize: 18,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-  },
-  lead: { color: colors.soft, fontSize: 22, textAlign: "center" },
-  body: { color: colors.soft, fontSize: 20, textAlign: "center" },
-  prompt: { color: colors.sky, fontSize: 22, textAlign: "center" },
-  card: { backgroundColor: colors.card, borderRadius: 12, padding: 16 },
-  cardTitle: { color: colors.text, fontSize: 20, fontWeight: "500" },
-  cardText: { color: colors.muted, fontSize: 16, marginTop: 2 },
-  note: { color: "#fcd34d", fontSize: 16, marginTop: 4 },
+  root: { flex: 1, backgroundColor: colors.sky, overflow: "hidden" },
+  sky: { position: "absolute", top: 0, left: 0, right: 0 },
+  fill: { flex: 1, alignItems: "center", justifyContent: "center", gap: 20 },
   row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 16 },
-  primary: {
-    height: 64,
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 48,
-  },
-  primaryText: { color: colors.bg, fontSize: 20, fontWeight: "600" },
-  secondary: {
-    height: 64,
-    justifyContent: "center",
-    borderRadius: 999,
-    backgroundColor: colors.track,
-    paddingHorizontal: 40,
-  },
-  secondaryText: { color: colors.text, fontSize: 20 },
+  title: { color: colors.ink, fontWeight: "700", textAlign: "center" },
+  eyebrow: { color: colors.control, letterSpacing: 3, textTransform: "uppercase", fontWeight: "700" },
+  lead: { color: colors.ink, textAlign: "center", maxWidth: 900 },
+  prompt: { color: colors.control, fontWeight: "600", textAlign: "center" },
+  note: { color: colors.amberDark, textAlign: "center" },
+  button: { justifyContent: "center", borderRadius: 999 },
 });

@@ -1,5 +1,5 @@
 export type Level = 0 | 1 | 2;
-export type ModifierId = "barrierIsland" | "marsh" | "levee" | "seawall";
+export type ModifierId = "barrierIsland" | "marsh" | "ridge" | "levee";
 export type Levels = Record<ModifierId, Level>;
 export type OutcomeId = "protected" | "vehicles" | "homes" | "overtopped";
 
@@ -40,22 +40,22 @@ const barrierIsland = {
     },
     {
       id: "marsh",
-      label: "Marsh",
+      label: "Marsh Landbridge",
       hero: true,
       description: "The hero! Marsh grass soaks up water and slows the surge.",
       reduction: [0, 0.15, 0.3],
+    },
+    {
+      id: "ridge",
+      label: "Natural Ridge",
+      description: "A strip of high, wooded ground that blocks and slows water.",
+      reduction: [0, 0.1, 0.2],
     },
     {
       id: "levee",
       label: "Levee",
       description: "A broad hill of earth that holds water back.",
       reduction: [0, 0.2, 0.35],
-    },
-    {
-      id: "seawall",
-      label: "Seawall",
-      description: "A wall of concrete or rock along the edge of town.",
-      reduction: [0, 0.1, 0.2],
     },
   ] as Modifier[],
   levelLabels: ["None", "Medium", "High"],
@@ -99,8 +99,8 @@ export type Severity = (typeof barrierIsland.severities)[number];
 export const neutralLevels = (): Levels => ({
   barrierIsland: barrierIsland.neutralLevel,
   marsh: barrierIsland.neutralLevel,
+  ridge: barrierIsland.neutralLevel,
   levee: barrierIsland.neutralLevel,
-  seawall: barrierIsland.neutralLevel,
 });
 
 /** Marsh needs a barrier island: it can't be healthier than the island shielding it. */
