@@ -20,11 +20,6 @@ const barrierIsland = {
   idleTimeoutMs: 45_000,
   /** How long the controller shows "simulating" before the result. */
   simulationMs: 14_000,
-  /** Max water height (ft) the OLED layer can depict (top of the model). */
-  displayMaxSurgeFt: 24,
-  /** Resting water height (ft) for the calm sea loop. */
-  calmWaterFt: 1.5,
-
   /** Incoming storms; the kiosk rotates through these on each visit. */
   severities: [
     { id: "tropical", label: "Tropical Storm", surgeFt: 6, wind: "40–70 mph winds" },
@@ -97,13 +92,6 @@ const barrierIsland = {
     },
   ] satisfies { id: OutcomeId; title: string; text: string }[],
 
-  /**
-   * Optional pre-rendered water layers. Return a video URL for a given
-   * scenario to play it on the OLED; return undefined to use the built-in
-   * procedural water.
-   */
-  waterLayerSrc: (scenario: { severityId: string; levels: Levels }): string | undefined =>
-    void scenario,
 };
 
 export type Severity = (typeof barrierIsland.severities)[number];
@@ -137,11 +125,6 @@ export function effectiveSurgeFt(severityId: string, levels: Levels) {
     1,
   );
   return severityOf(severityId).surgeFt * remaining;
-}
-
-/** 0 = no defenses, 1 = all of the surge stopped. More protection slows the water. */
-export function protectionShare(severityId: string, levels: Levels) {
-  return 1 - effectiveSurgeFt(severityId, levels) / severityOf(severityId).surgeFt;
 }
 
 export function outcomeFor(ft: number) {
