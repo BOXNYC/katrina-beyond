@@ -17,22 +17,10 @@ if %errorlevel%==0 (
 
 where node >nul 2>&1
 if errorlevel 1 (
-    echo Node.js not found. Installing Node.js LTS...
-    where winget >nul 2>&1
-    if errorlevel 1 (
-        echo winget is not available. Please install Node.js LTS from https://nodejs.org and run this again.
-        pause
-        exit /b 1
-    )
-    winget install -e --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-    :: The installer updates PATH for new windows only, so add it for this one
-    set "PATH=%ProgramFiles%\nodejs;%PATH%"
-    where node >nul 2>&1
-    if errorlevel 1 (
-        echo Node.js installation failed. Please install Node.js LTS from https://nodejs.org and run this again.
-        pause
-        exit /b 1
-    )
+    echo Node.js is not installed.
+    powershell -NoProfile -Command "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('Node.js is required but is not installed.' + [Environment]::NewLine + [Environment]::NewLine + 'Click OK to open the download page, install the LTS version, then run this launcher again.', 'Node.js not found', 'OK', 'Warning') | Out-Null"
+    start "" https://nodejs.org/en/download
+    exit /b 1
 )
 
 where pnpm >nul 2>&1
