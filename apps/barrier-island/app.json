@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "barrier-island",
+    "slug": "barrier-island",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.louisianastatemuseum.barrierisland"
+    }
+  }
+}

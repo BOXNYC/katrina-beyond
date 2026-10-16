@@ -1,0 +1,10 @@
+node_modules
+.turbo
+.next
+dist
+.expo
+ios/build
+Pods
+.DS_Store
+*.tsbuildinfo
+*.log
