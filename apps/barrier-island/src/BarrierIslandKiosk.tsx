@@ -2,7 +2,6 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import barrierIsland, {
   effectiveSurgeFt,
-  marshCompromised,
   neutralLevels,
   outcomeFor,
   type Level,
@@ -107,10 +106,29 @@ export default function BarrierIslandKiosk() {
     setState({ phase: "storm", severityId: next.id, levels: neutralLevels() });
   };
 
-  const setLevel = (id: ModifierId, level: Level) =>
-    setState((st) => ({ ...st, levels: { ...st.levels, [id]: level } }));
+  // Marsh needs a barrier island: turning the island off turns the marsh off,
+  // and the marsh can't be turned on until the island is.
+  const [marshBlocked, setMarshBlocked] = useState(false);
+  const setLevel = (id: ModifierId, level: Level) => {
+    if (id === "marsh" && level > 0 && levels.barrierIsland === 0) {
+      setMarshBlocked(true);
+      return;
+    }
+    if (id === "barrierIsland") setMarshBlocked(false);
+    setState((st) => ({
+      ...st,
+      levels: {
+        ...st.levels,
+        [id]: level,
+        ...(id === "barrierIsland" && level === 0 ? { marsh: 0 as Level } : {}),
+      },
+    }));
+  };
 
-  const goto = (next: Phase) => setState((st) => ({ ...st, phase: next }));
+  const goto = (next: Phase) => {
+    setMarshBlocked(false);
+    setState((st) => ({ ...st, phase: next }));
+  };
 
   const ft = effectiveSurgeFt(severityId, levels);
   const outcome = outcomeFor(ft);
@@ -163,7 +181,7 @@ export default function BarrierIslandKiosk() {
             <Text style={[styles.lead, { fontSize: 32 * u }]}>
               {severity.label} · {severity.surgeFt} ft surge
             </Text>
-            {marshCompromised(levels) && (
+            {marshBlocked && levels.barrierIsland === 0 && (
               <Text style={[styles.note, { fontSize: 24 * u }]}>{barrierIsland.marshNote}</Text>
             )}
             <PrimaryButton u={u} onPress={() => goto("simulating")}>
