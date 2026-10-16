@@ -1,5 +1,5 @@
 import evacuation from "./evacuation";
-import barrierIsland from "./barrierIsland";
+// import barrierIsland from "./barrierIsland";
 import electricGrid from "./electricGrid";
 
 export type InteractiveKey = keyof typeof interactives;
@@ -12,14 +12,14 @@ export const interactives = {
     },
     data: evacuation,
   },
-  barrierIsland: {
+  /* barrierIsland: {
     info: {
       slug: "barrier-island",
       title: "Barrier Island",
       description: "See how marsh, islands and levees work together to slow storm surge.",
     },
     data: barrierIsland,
-  },
+  }, */
   electricGrid: {
     info: {
       slug: "electric-grid",
