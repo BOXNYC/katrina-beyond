@@ -60,10 +60,6 @@ const barrierIsland = {
   ] as Modifier[],
   levelLabels: ["None", "Medium", "High"],
 
-  /** Shown when the player sets the marsh higher than its island can protect. */
-  marshNote:
-    "Without a big enough barrier island, waves wash the marsh away.",
-
   /** Heights (ft) of water at the community. Cars sit lower than elevated homes. */
   vehicleFloodFt: 2,
   homeFloodFt: 8,

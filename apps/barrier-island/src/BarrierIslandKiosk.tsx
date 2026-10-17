@@ -11,9 +11,10 @@ import barrierIsland, {
 import Controls from "./components/Controls";
 import HelpAgent from "./components/HelpAgent";
 import Scene, { STAGE_H, STAGE_W } from "./components/Scene";
+import modelLink from "./lib/modelLink";
 import { colors } from "./theme";
 
-const { severities } = barrierIsland;
+const { severities, modifiers } = barrierIsland;
 
 /** The painting as drawn: every defense in place. Shown before play begins. */
 /** Stage units of empty sand at the bottom that can be cropped off. */
@@ -73,15 +74,18 @@ export default function BarrierIslandKiosk() {
   const { phase, severityId, levels } = state;
   const severity = severities.find((x) => x.id === severityId) ?? severities[0];
 
-  const reset = useCallback(
-    () =>
-      setState((st) => ({
-        phase: "idle",
-        severityId: st.severityId,
-        levels: neutralLevels(),
-      })),
-    [],
-  );
+  const levelsRef = useRef(state.levels);
+  useEffect(() => {
+    levelsRef.current = levels;
+  }, [levels]);
+  const reset = useCallback(() => {
+    // Tell the model about every option that goes back to its resting state.
+    const rest = neutralLevels();
+    for (const m of modifiers) {
+      if (levelsRef.current[m.id] !== rest[m.id]) modelLink.sendOption(m.id, rest[m.id]);
+    }
+    setState((st) => ({ phase: "idle", severityId: st.severityId, levels: rest }));
+  }, []);
 
   // Return to the calm loop after inactivity (not mid-simulation).
   const [touches, setTouches] = useState(0);
@@ -107,28 +111,25 @@ export default function BarrierIslandKiosk() {
   };
 
   // Marsh needs a barrier island: turning the island off turns the marsh off,
-  // and the marsh can't be turned on until the island is.
-  const [marshBlocked, setMarshBlocked] = useState(false);
+  // and turning the marsh on turns the island on.
   const setLevel = (id: ModifierId, level: Level) => {
-    if (id === "marsh" && level > 0 && levels.barrierIsland === 0) {
-      setMarshBlocked(true);
-      return;
-    }
-    if (id === "barrierIsland") setMarshBlocked(false);
+    modelLink.sendOption(id, level);
+    const forceMarshOff = id === "barrierIsland" && level === 0 && levels.marsh !== 0;
+    const forceIslandOn = id === "marsh" && level > 0 && levels.barrierIsland === 0;
+    if (forceMarshOff) modelLink.sendOption("marsh", 0);
+    if (forceIslandOn) modelLink.sendOption("barrierIsland", 2);
     setState((st) => ({
       ...st,
       levels: {
         ...st.levels,
         [id]: level,
-        ...(id === "barrierIsland" && level === 0 ? { marsh: 0 as Level } : {}),
+        ...(forceMarshOff ? { marsh: 0 as Level } : {}),
+        ...(forceIslandOn ? { barrierIsland: 2 as Level } : {}),
       },
     }));
   };
 
-  const goto = (next: Phase) => {
-    setMarshBlocked(false);
-    setState((st) => ({ ...st, phase: next }));
-  };
+  const goto = (next: Phase) => setState((st) => ({ ...st, phase: next }));
 
   const ft = effectiveSurgeFt(severityId, levels);
   const outcome = outcomeFor(ft);
@@ -181,10 +182,13 @@ export default function BarrierIslandKiosk() {
             <Text style={[styles.lead, { fontSize: 32 * u }]}>
               {severity.label} · {severity.surgeFt} ft surge
             </Text>
-            {marshBlocked && levels.barrierIsland === 0 && (
-              <Text style={[styles.note, { fontSize: 24 * u }]}>{barrierIsland.marshNote}</Text>
-            )}
-            <PrimaryButton u={u} onPress={() => goto("simulating")}>
+            <PrimaryButton
+              u={u}
+              onPress={() => {
+                modelLink.sendSimulate(severityId, levels);
+                goto("simulating");
+              }}
+            >
               Simulate
             </PrimaryButton>
           </View>
@@ -281,6 +285,5 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.control, letterSpacing: 3, textTransform: "uppercase", fontWeight: "700" },
   lead: { color: colors.ink, textAlign: "center", maxWidth: 900 },
   prompt: { color: colors.control, fontWeight: "600", textAlign: "center" },
-  note: { color: colors.amberDark, textAlign: "center" },
   button: { justifyContent: "center", borderRadius: 999 },
 });
