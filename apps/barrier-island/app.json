@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "barrier-island",
+    "name": "Barrier Island",
     "slug": "barrier-island",
     "version": "1.0.0",
     "orientation": "default",
@@ -12,7 +12,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.louisianastatemuseum.barrierisland"
+      "bundleIdentifier": "org.louisianastatemuseum.barrierisland",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Barrier Island connects to the exhibit display on the museum's local network."
+      }
     },
     "web": {
       "bundler": "metro",

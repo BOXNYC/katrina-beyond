@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 25.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "adhoc": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "node": "24.21.0",
+      "pnpm": "12.8.1",
+      "env": {
+        "EXPO_PUBLIC_MODEL_HOST": "192.168.1.50",
+        "EXPO_PUBLIC_MODEL_PORT": "9000"
+      }
+    }
+  }
+}
