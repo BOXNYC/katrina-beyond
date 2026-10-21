@@ -79,8 +79,11 @@ allowance is plenty for this project.
 `eas init` creates the project on your Expo account and writes its `projectId`
 into `app.json`.
 
-### 2.3 🤖 ASK CLAUDE: Commit the project link
-> "Commit the barrier-island app.json projectId change from eas init."
+### 2.3 🧑 MANUAL: Commit the project link
+Commit the `projectId` that `eas init` added to `apps/barrier-island/app.json`,
+along with the distribution config already in the repo (`eas.json`, `app.json`,
+`package.json`, `pnpm-lock.yaml`, and these guides). EAS builds from your git
+repository, so commit before every build to keep each build matched to a commit.
 
 ### Already set up in the repo
 There's nothing to do here.
@@ -98,7 +101,9 @@ currently has the placeholder `192.168.1.50:9000`. Get the display controller's
 real IP and port from the museum's AV/IT contact, and ask them to give it a
 **static IP / DHCP reservation** so it never changes.
 
-> "Set the barrier-island display host to `<IP>` and port `<port>` in eas.json and commit it."
+> "Set the barrier-island display host to `<IP>` and port `<port>` in eas.json."
+
+Then 🧑 **MANUAL:** commit the `eas.json` change.
 
 ---
 
@@ -235,8 +240,7 @@ Installing over the existing app keeps it in place.
 
 | Step | Prompt |
 | --- | --- |
-| 2.3 | "Commit the barrier-island app.json projectId change from eas init." |
-| 2.4 | "Set the barrier-island display host to `<IP>` and port `<port>` in eas.json and commit it." |
+| 2.4 | "Set the barrier-island display host to `<IP>` and port `<port>` in eas.json." |
 | 3 | "List the registered barrier-island devices." |
 | 4.2 | "Build barrier-island for iOS with the adhoc profile and give me the install link." |
 | 4.3 | "Run a TCP listener on my Mac that prints what barrier-island sends." |

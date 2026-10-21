@@ -137,8 +137,8 @@ old credentials expire.
 
 1. Write the **new expiration date** in the exhibit binder.
 2. Move your calendar reminder to **30 days before** the new date.
-3. Commit any code changes:
-   > 🤖 "Commit the barrier-island renewal changes."
+3. Commit any code changes from this renewal (step 5B), ideally before the build
+   so it matches a commit.
 
 ---
 
