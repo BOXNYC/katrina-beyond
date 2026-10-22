@@ -3,7 +3,7 @@
     "name": "Barrier Island",
     "slug": "barrier-island",
     "version": "1.0.0",
-    "orientation": "default",
+    "orientation": "landscape",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "platforms": [
@@ -12,6 +12,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "org.louisianastatemuseum.barrierisland",
       "config": {
         "usesNonExemptEncryption": false

@@ -168,7 +168,7 @@ without rebuilding:
 
 ### 4.3 Test the TCP connection before installing at the museum
 This is the first native build of the app, and the first time
-`react-native-tcp-socket` runs outside Expo Go. `expo-doctor` warns that it's
+`react-native-tcp-socket` runs in a native build. `expo-doctor` warns that it's
 "untested on New Architecture." Check that it connects on an iPhone (step 5),
 either to the real display or to a test listener on your Mac:
 

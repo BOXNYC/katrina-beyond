@@ -8,14 +8,17 @@ const RETRY_MS = 3000;
 
 type Tcp = typeof import("react-native-tcp-socket").default;
 
-// Expo Go doesn't include this native module and throws when it is loaded. In
-// that case (or any build without it) messages are only logged.
+// The native module is missing on web and throws when it is loaded. In that
+// case (or any build without it) messages are only logged.
 let TcpSocket: Tcp | null = null;
 try {
+  // The package ends with `module.exports = {...}`, which replaces its own
+  // `export default`, so `.default` is undefined under Metro. Fall back to the module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  TcpSocket = require("react-native-tcp-socket").default as Tcp;
+  const mod = require("react-native-tcp-socket");
+  TcpSocket = (mod.default ?? mod) as Tcp;
 } catch {
-  console.warn("[model] TCP unavailable (Expo Go?). Use a development build; logging only.");
+  console.warn("[model] TCP unavailable (web or no native module); logging only.");
 }
 
 let socket: ReturnType<Tcp["createConnection"]> | null = null;
@@ -42,7 +45,7 @@ function connect() {
       for (const m of lastOptions.values()) s.write(encode(m));
     });
   } catch (e) {
-    // The native side is missing (Expo Go): give up and just log.
+    // The native side is missing: give up and just log.
     console.warn("[model] TCP unavailable; logging only.", e);
     TcpSocket = null;
     return;

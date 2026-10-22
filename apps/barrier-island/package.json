@@ -20,9 +20,9 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "dev": "expo start --ios",
+    "dev": "expo run:ios",
     "start": "expo start",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "web": "expo start --web",
     "build": "expo export --platform web",
