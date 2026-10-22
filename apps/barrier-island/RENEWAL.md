@@ -25,7 +25,7 @@ Same markers as [DISTRIBUTION.md](DISTRIBUTION.md): 🧑 **MANUAL** = you do it,
 ## 1. 🧑 MANUAL: Make sure the Apple Developer membership is active
 
 1. Sign in at <https://developer.apple.com/account> with your company Apple
-   Account, and select the **company team**.
+   Account, and select the **BOX Creative, LLC** team (Team ID `RK25ZT8XB9`).
 2. **Membership details** should show an expiration date in the future. If it's
    about to expire, have the company's Account Holder renew it.
 3. Confirm you still have **Certificates, Identifiers & Profiles** access (see
@@ -67,7 +67,7 @@ generates fresh ones with a full year on them.
 ```
 
 1. Pick the **`adhoc`** build profile, and sign in with your company Apple
-   Account (company team) if asked.
+   Account (BOX Creative, LLC team) if asked.
 2. Open the build credentials menu and **remove the provisioning profile**.
 3. **Remove the distribution certificate** too.
    - ⚠️ If EAS asks whether to **also revoke/delete it on the Apple Developer

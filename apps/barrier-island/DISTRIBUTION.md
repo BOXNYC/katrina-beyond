@@ -28,8 +28,9 @@ interactively in this session, so Claude can see the result.
 
 ## 1. Check your company Apple Developer account
 
-You're using your company's existing, paid **Organization** membership. Nothing
-needs to be enrolled or bought. Ad hoc builds don't use App Store Connect,
+You're using your company's existing, paid **Organization** membership: the
+**BOX Creative, LLC** team, Team ID **`RK25ZT8XB9`**. Nothing needs to be
+enrolled or bought. Ad hoc builds don't use App Store Connect,
 TestFlight, or any agreements.
 
 ### 1.1 🧑 MANUAL: Confirm the membership and your role
@@ -37,8 +38,8 @@ TestFlight, or any agreements.
    that belongs to your company's team.
 2. If you belong to more than one team, use the team switcher (top right) to
    select the **company team**.
-3. **Membership details** should show the company name, **Organization**, a
-   **Team ID** (write it down), and an expiration date in the future.
+3. **Membership details** should show **BOX Creative, LLC**, **Organization**,
+   Team ID **`RK25ZT8XB9`**, and an expiration date in the future.
 4. Check your **role**. EAS needs to create a distribution certificate, register
    devices, and create ad hoc profiles, so you need one of these:
    - **Account Holder**, or
@@ -121,7 +122,7 @@ with every other company project (see 1.2).
 ! cd apps/barrier-island && npx eas-cli@latest device:create
 ```
 1. Sign in with your company Apple Account when prompted, and pick the
-   **company team** (check the Team ID) if more than one is listed.
+   **BOX Creative, LLC** team (Team ID `RK25ZT8XB9`) if more than one is listed.
 2. Choose **Website** to get a URL and QR code.
 
 ### 3.2 🧑 MANUAL: Register each device
@@ -135,7 +136,10 @@ On **each** device, the museum iPad included:
 Give each device a clear name (e.g. *LSM Exhibit iPad*, *Joe iPhone*). To rename
 or check them later:
 
-> 🤖 "List the registered barrier-island devices." (This runs `eas device:list`.)
+> 🤖 "List the registered barrier-island devices." (This runs
+> `eas device:list --apple-team-id RK25ZT8XB9`. The list is for the whole
+> BOX Creative team, not just this app, and Claude has to pass the team ID
+> because it can't pick a team interactively.)
 
 > For a newly renewed or new membership, Apple can take **24–72 hours** to
 > process new devices. If the first build fails to include a device, wait and
@@ -151,8 +155,8 @@ The first build has to be interactive. EAS signs in to Apple and creates the
 ```
 ! cd apps/barrier-island && npx eas-cli@latest build --platform ios --profile adhoc
 ```
-- Answer **Yes** to logging in to your Apple account, and select the **company
-  team** (check the Team ID).
+- Answer **Yes** to logging in to your Apple account, and select the **BOX
+  Creative, LLC** team (Team ID `RK25ZT8XB9`).
 - If EAS offers to **reuse an existing distribution certificate**, decline and
   choose **generate a new Apple Distribution Certificate**. That gives this
   project its own certificate (see 1.2). If Apple refuses because the team is at
