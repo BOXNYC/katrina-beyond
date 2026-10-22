@@ -24,18 +24,20 @@ Same markers as [DISTRIBUTION.md](DISTRIBUTION.md): 🧑 **MANUAL** = you do it,
 
 ## 1. 🧑 MANUAL: Make sure the Apple Developer membership is active
 
-1. Sign in at <https://developer.apple.com/account> with your **personal** Apple
-   Account.
+1. Sign in at <https://developer.apple.com/account> with your company Apple
+   Account, and select the **company team**.
 2. **Membership details** should show an expiration date in the future. If it's
-   about to expire, renew it there or in the Apple Developer app ($99). If you
-   enabled auto-renew, just confirm the payment went through.
-3. Without an active membership you can't create a new certificate or
+   about to expire, have the company's Account Holder renew it.
+3. Confirm you still have **Certificates, Identifiers & Profiles** access (see
+   [DISTRIBUTION.md, 1.1](DISTRIBUTION.md#11--manual-confirm-the-membership-and-your-role)).
+   Roles sometimes change over a year.
+4. Without an active membership you can't create a new certificate or
    profile, and none of the steps below will work.
 
-> Apple may offer to **reset your device list** at the start of a new membership
-> year. That frees up device slots. If you do it, keep (or re-register) the
-> **museum iPad** and anyone still testing, or they'll be left out of the new
-> profile.
+> The Account Holder may **reset the team's device list** at the start of a new
+> membership year. That affects every company project. If they do, make sure the
+> **museum iPad** and anyone still testing are kept (or re-registered), or
+> they'll be left out of the new profile.
 
 ## 2. 🤖 ASK CLAUDE: Check the current expiration dates
 
@@ -64,20 +66,22 @@ generates fresh ones with a full year on them.
 ! cd apps/barrier-island && npx eas-cli@latest credentials --platform ios
 ```
 
-1. Pick the **`adhoc`** build profile, and sign in with your personal Apple
-   Account if asked.
+1. Pick the **`adhoc`** build profile, and sign in with your company Apple
+   Account (company team) if asked.
 2. Open the build credentials menu and **remove the provisioning profile**.
 3. **Remove the distribution certificate** too.
    - ⚠️ If EAS asks whether to **also revoke/delete it on the Apple Developer
      Portal, answer No.** The app on the iPad is still signed with the old
      certificate. Revoking it can stop the exhibit **immediately**, before the
-     new build is installed. Let the old certificate expire on its own.
+     new build is installed. Let the old certificate expire on its own. If it's a
+     certificate other company apps use, revoking it would break those too.
 4. Exit the menu.
 
-> If Apple later says you've hit the maximum number of distribution
-> certificates, revoke **only** certificates that have already expired, at
+> If Apple later says the team has hit the maximum number of distribution
+> certificates, check with the company's Account Holder. Only certificates that
+> have **already expired** are safe to revoke, at
 > <https://developer.apple.com/account/resources/certificates/list>. Never
-> revoke the one the iPad is currently using.
+> revoke the one the iPad is using, or one another company app depends on.
 
 ## 5. 🧑 MANUAL: Create a newly signed build
 
@@ -151,7 +155,7 @@ old credentials expire.
 | iPad asks for **Developer Mode** | iPadOS setting | **Settings → Privacy & Security → Developer Mode → On**, then restart |
 | Build fails with a device/profile error right after renewing membership | Apple is still processing devices (24–72 hours) | Wait a day and retry step 5 |
 | Display doesn't respond after reinstall | Local Network permission denied, or the controller's IP changed | **Settings → Privacy & Security → Local Network → Barrier Island → On**. If the IP changed: 🤖 "Set the barrier-island display host to `<IP>` in eas.json", then do step 5B. |
-| EAS says "maximum number of certificates" | Too many active distribution certs | Revoke only already-expired ones (see step 4) |
+| EAS says "maximum number of certificates" | The company team has too many active distribution certs | Ask the Account Holder. Only already-expired ones are safe to revoke (see step 4). |
 
 ## Sources
 - Expo: [App credentials](https://docs.expo.dev/app-signing/app-credentials/) ("Provisioning profiles expire after 12 months"; profiles must be regenerated when the certificate expires)

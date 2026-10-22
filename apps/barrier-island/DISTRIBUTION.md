@@ -2,7 +2,7 @@
 
 How to put the Barrier Island app on the Louisiana State Museum's iPad for the
 *Katrina and Beyond* exhibition, and on your team's iPhones for testing. It
-uses **ad hoc distribution** from a personal (Individual) Apple Developer
+uses **ad hoc distribution** from your company's (Organization) Apple Developer
 account, built and signed in the cloud by **EAS Build**.
 
 > Researched October 2026 against Apple Developer and Expo/EAS docs (Expo SDK 58,
@@ -26,41 +26,43 @@ interactively in this session, so Claude can see the result.
 
 ---
 
-## 1. Set up your personal Apple Developer account
+## 1. Check your company Apple Developer account
 
-### 1.1 🧑 MANUAL: Create a personal Apple Account
-Use an Apple Account that is **not** tied to your company's developer team, so
-this project stays completely separate.
+You're using your company's existing, paid **Organization** membership. Nothing
+needs to be enrolled or bought. Ad hoc builds don't use App Store Connect,
+TestFlight, or any agreements.
 
-1. Go to <https://account.apple.com> → **Create Your Apple Account**. Use a
-   personal email address, not your company email.
-2. Turn on **two-factor authentication** with your iPhone. Apple requires it for
-   developer accounts.
+### 1.1 🧑 MANUAL: Confirm the membership and your role
+1. Sign in at <https://developer.apple.com/account> with the Apple Account
+   that belongs to your company's team.
+2. If you belong to more than one team, use the team switcher (top right) to
+   select the **company team**.
+3. **Membership details** should show the company name, **Organization**, a
+   **Team ID** (write it down), and an expiration date in the future.
+4. Check your **role**. EAS needs to create a distribution certificate, register
+   devices, and create ad hoc profiles, so you need one of these:
+   - **Account Holder**, or
+   - **Admin** or **App Manager** *with* "Access to Certificates, Identifiers &
+     Profiles" turned on. The Account Holder or an Admin grants this in
+     App Store Connect → **Users and Access** → your name.
 
-### 1.2 🧑 MANUAL: Enroll in the Apple Developer Program as an Individual
-It costs **$99/year**. The fastest route is the Apple Developer app on your iPhone:
+   If you can open **Certificates, IDs & Profiles** and see the **+** button
+   next to *Certificates* and *Devices*, you have the access you need.
 
-1. Install **Apple Developer** from the App Store on your iPhone.
-2. Open it → **Account** → sign in with the personal Apple Account from 1.1.
-3. Tap **Enroll Now** → choose **Individual**.
-4. Follow the prompts. The app scans your government-issued photo ID.
-   - Enter your **real legal name**. Don't use a nickname or company name, or
-     approval is delayed.
-   - Pay with **your own credit card**. A card in someone else's name delays
-     enrollment.
-5. Approval usually takes a day or two. You'll get a welcome email.
-
-(You can also enroll on the web at <https://developer.apple.com/programs/enroll/>.)
-
-### 1.3 🧑 MANUAL: Confirm the membership is active
-Sign in at <https://developer.apple.com/account> with the personal account.
-**Membership details** should show **Individual**, your name, a **Team ID**,
-and an expiration date one year out.
-
-> **Put the membership expiration date in your calendar.** If the membership
-> lapses, you can't renew the app's signing. [RENEWAL.md](RENEWAL.md) covers this.
-
-You don't need App Store Connect, TestFlight, or any agreements for ad hoc.
+### 1.2 Things to know about sharing the company team
+- **The device limit is shared.** The team gets 100 iPhones and 100 iPads per
+  membership year, across **all** company projects. Check how many slots are
+  free under *Certificates, IDs & Profiles → Devices*. Removing a device doesn't
+  free its slot until the membership renews.
+- **Distribution certificates are shared.** Other company apps may be signed
+  with the team's existing Apple Distribution certificate. In step 4.1, have EAS
+  **generate a new certificate** for this project instead of reusing one, so its
+  expiration date is predictable and renewing it never affects other company
+  apps. **Never revoke a certificate** you didn't create for this project.
+- **The museum exhibit depends on the company membership.** If it's ever not
+  renewed, you can't renew the app's signing and it stops opening within a year.
+  Make sure whoever handles the company's Apple renewal knows a permanent exhibit
+  depends on it, and put the membership expiration date in your calendar.
 
 ---
 
@@ -111,15 +113,15 @@ Then 🧑 **MANUAL:** commit the `eas.json` change.
 
 Ad hoc builds only install on devices whose ID (UDID) is in the provisioning
 profile. Register the museum iPad and every tester's iPhone **before** building.
-An Individual account allows 100 iPhones and 100 iPads per membership year, and
-removing a device doesn't free its slot until the membership renews.
+The company team allows 100 iPhones and 100 iPads per membership year, shared
+with every other company project (see 1.2).
 
 ### 3.1 🧑 MANUAL: Create a registration link
 ```
 ! cd apps/barrier-island && npx eas-cli@latest device:create
 ```
-1. Sign in with your **personal** Apple Account when prompted, and pick the
-   personal team if more than one is listed.
+1. Sign in with your company Apple Account when prompted, and pick the
+   **company team** (check the Team ID) if more than one is listed.
 2. Choose **Website** to get a URL and QR code.
 
 ### 3.2 🧑 MANUAL: Register each device
@@ -149,8 +151,13 @@ The first build has to be interactive. EAS signs in to Apple and creates the
 ```
 ! cd apps/barrier-island && npx eas-cli@latest build --platform ios --profile adhoc
 ```
-- Answer **Yes** to logging in to your Apple account (the personal one).
-- Answer **Yes** to generating a new Apple Distribution Certificate.
+- Answer **Yes** to logging in to your Apple account, and select the **company
+  team** (check the Team ID).
+- If EAS offers to **reuse an existing distribution certificate**, decline and
+  choose **generate a new Apple Distribution Certificate**. That gives this
+  project its own certificate (see 1.2). If Apple refuses because the team is at
+  its certificate limit, ask the Account Holder which certificate is safe to use.
+  Don't revoke one yourself.
 - When asked which devices to include in the profile, **select all of them**.
 
 The build runs in the cloud (~10–20 minutes). Then you get a build page URL and QR code.
@@ -252,6 +259,6 @@ Installing over the existing app keeps it in place.
 - Expo: [App credentials](https://docs.expo.dev/app-signing/app-credentials/)
 - Expo: [eas.json reference](https://docs.expo.dev/eas/json/)
 - Expo: [SDK 58 app config](https://docs.expo.dev/versions/v58.0.0/config/app/)
-- Apple: [Program enrollment](https://developer.apple.com/help/account/membership/program-enrollment)
+- Apple: [Roles](https://developer.apple.com/help/account/access/roles)
 - Apple: [NSLocalNetworkUsageDescription](https://developer.apple.com/documentation/bundleresources/information-property-list/nslocalnetworkusagedescription)
 - Apple: [Use Guided Access on iPhone or iPad](https://support.apple.com/en-us/ht202612)
