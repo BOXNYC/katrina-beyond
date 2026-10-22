@@ -186,6 +186,10 @@ either to the real display or to a test listener on your Mac:
 > 🤖 "Run a TCP listener on my Mac that prints what barrier-island sends, and
 > tell me what IP to put in eas.json for testing."
 
+Full steps for starting and stopping the listener, on the simulator or a real
+device, are in **[TESTING_TCP.md](TESTING_TCP.md)**. Claude Code also has the
+`/barrier-island-tcp-start` and `/barrier-island-tcp-stop` skills for this.
+
 If it doesn't connect:
 > 🤖 "The barrier-island TCP connection fails on device. Diagnose it."
 
