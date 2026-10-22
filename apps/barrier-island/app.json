@@ -24,6 +24,12 @@
     "web": {
       "bundler": "metro",
       "output": "single"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "52944e28-d598-433e-a4cd-c32e91b0587d"
+      }
+    },
+    "owner": "josephnewyork"
   }
 }
