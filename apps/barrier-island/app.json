@@ -23,13 +23,19 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
         "projectId": "52944e28-d598-433e-a4cd-c32e91b0587d"
       }
     },
-    "owner": "josephnewyork"
+    "owner": "josephnewyork",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    }
   }
 }
