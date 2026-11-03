@@ -1,8 +1,7 @@
 # Testing TCP on my Mac locally
 
-Use your Mac as a stand-in for the exhibit display. The app sends its messages
-(`set` and `simulate`, one JSON object per line) over TCP, and a small listener
-on your Mac prints them. Use this to check the connection on the iOS simulator
+Use your Mac as a stand-in for the exhibit display. When the guest taps Simulate, the app sends
+`Sim,0,1,0,2\r` over TCP, and a small listener on your Mac prints it. Use this to check the connection on the iOS simulator
 or on a real iPhone/iPad before the real display is available.
 
 Same markers as [DISTRIBUTION.md](DISTRIBUTION.md): 🧑 **MANUAL** = you do it,
@@ -56,13 +55,16 @@ Then follow [DISTRIBUTION.md, Section 4](DISTRIBUTION.md#4-build-the-app).
 1. Open the app. The listener should print `CONNECTED`. On a device, tap **Allow**
    when iOS shows the **Local Network** prompt. If you missed it: **Settings →
    Privacy & Security → Local Network → Barrier Island → On**.
-2. Tap **Touch to begin**, toggle a switch, and tap **Simulate**.
-3. Each action prints a `DATA` line within a second, for example
-   `{"command":"set","option":"levee","level":2}`.
+2. Tap **Touch to begin**, toggle switches (nothing is sent yet), and tap **Simulate**.
+3. The listener prints one `DATA` line, for example `"Sim,0,1,0,2\r"`
+   (island, landbridge, ridge, levee).
+4. In the listener terminal, type `r` and press Enter to send `Reset\r` to the
+   app, which moves it to the result screen (as the show controller does when
+   the simulation is done).
 
 The app connects at launch and retries every 3 seconds, so it connects within
 a few seconds of the listener starting, in either order. If the connection
-drops, it reconnects and re-sends the latest level of each option.
+drops, it reconnects. Nothing is replayed: only Simulate sends anything.
 
 ---
 

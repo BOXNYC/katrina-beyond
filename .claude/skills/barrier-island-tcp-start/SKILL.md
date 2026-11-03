@@ -34,6 +34,7 @@ It should print `listening on 9000`.
    - The listener's address, `<Mac IP>:<port>`, and the log path, so they can run `tail -f <log>`.
    - **Simulator:** start the app with `EXPO_PUBLIC_MODEL_HOST=127.0.0.1 EXPO_PUBLIC_MODEL_PORT=<port> npx expo run:ios` from `apps/barrier-island`. Don't run Metro with `CI=1` (it turns off file watching), and make sure no older Metro is running on 8081, or the app keeps the old host.
    - **Real device:** the host is baked into the build. Set it in the `adhoc` profile of `apps/barrier-island/eas.json` (offer to do it), commit, and rebuild. The device must be on the same Wi-Fi as the Mac, and the user must tap **Allow** on the Local Network prompt.
-   - Expect `CONNECTED <address>` then `DATA "<message>"` lines when they use the app.
+   - Expect `CONNECTED <address>`, then nothing until they tap **Simulate** (options changing sends nothing). Simulate prints one line like `DATA "Sim,0,1,0,2\r"` (island, landbridge, ridge, levee).
+   - The app moves to its result screen when the controller sends `Reset\r`. The background listener has no stdin, so it can't send that. To test it, the user runs the listener in their own terminal (`node apps/barrier-island/scripts/tcp-listener.js`) and types `r` + Enter, which sends `Reset\r` to the app. Otherwise the app falls back to its 14 second timer.
 
 Never commit for the user. Remind them `eas.json` must go back to the display's real IP before the museum build.

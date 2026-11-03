@@ -14,7 +14,7 @@ import Scene, { STAGE_H, STAGE_W } from "./components/Scene";
 import modelLink from "./lib/modelLink";
 import { colors } from "./theme";
 
-const { severities, modifiers } = barrierIsland;
+const { severities } = barrierIsland;
 
 /** The painting as drawn: every defense in place. Shown before play begins. */
 /** Stage units of empty sand at the bottom that can be cropped off. */
@@ -74,17 +74,8 @@ export default function BarrierIslandKiosk() {
   const { phase, severityId, levels } = state;
   const severity = severities.find((x) => x.id === severityId) ?? severities[0];
 
-  const levelsRef = useRef(state.levels);
-  useEffect(() => {
-    levelsRef.current = levels;
-  }, [levels]);
   const reset = useCallback(() => {
-    // Tell the model about every option that goes back to its resting state.
-    const rest = neutralLevels();
-    for (const m of modifiers) {
-      if (levelsRef.current[m.id] !== rest[m.id]) modelLink.sendOption(m.id, rest[m.id]);
-    }
-    setState((st) => ({ phase: "idle", severityId: st.severityId, levels: rest }));
+    setState((st) => ({ phase: "idle", severityId: st.severityId, levels: neutralLevels() }));
   }, []);
 
   // Return to the calm loop after inactivity (not mid-simulation).
@@ -95,14 +86,17 @@ export default function BarrierIslandKiosk() {
     return () => clearTimeout(t);
   }, [phase, touches, reset]);
 
-  // Move on to the result once the water simulation has run.
+  // Move on to the result when the show controller sends Reset. The timer is
+  // a fallback for when it never does (no connection, or the web build).
   useEffect(() => {
     if (phase !== "simulating") return;
-    const t = setTimeout(
-      () => setState((st) => ({ ...st, phase: "result" })),
-      barrierIsland.simulationMs,
-    );
-    return () => clearTimeout(t);
+    const done = () => setState((st) => (st.phase === "simulating" ? { ...st, phase: "result" } : st));
+    const t = setTimeout(done, barrierIsland.simulationMs);
+    const off = modelLink.onReset(done);
+    return () => {
+      clearTimeout(t);
+      off();
+    };
   }, [phase]);
 
   const wake = () => {
@@ -113,11 +107,8 @@ export default function BarrierIslandKiosk() {
   // Marsh needs a barrier island: turning the island off turns the marsh off,
   // and turning the marsh on turns the island on.
   const setLevel = (id: ModifierId, level: Level) => {
-    modelLink.sendOption(id, level);
     const forceMarshOff = id === "barrierIsland" && level === 0 && levels.marsh !== 0;
     const forceIslandOn = id === "marsh" && level > 0 && levels.barrierIsland === 0;
-    if (forceMarshOff) modelLink.sendOption("marsh", 0);
-    if (forceIslandOn) modelLink.sendOption("barrierIsland", 2);
     setState((st) => ({
       ...st,
       levels: {
@@ -185,7 +176,7 @@ export default function BarrierIslandKiosk() {
             <PrimaryButton
               u={u}
               onPress={() => {
-                modelLink.sendSimulate(severityId, levels);
+                modelLink.sendSimulate(levels);
                 goto("simulating");
               }}
             >

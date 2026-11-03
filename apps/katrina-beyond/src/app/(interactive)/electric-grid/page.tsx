@@ -1,5 +1,5 @@
-import ElectricGridKiosk from "./ElectricGridKiosk";
+import ElectricGridGame from "./ElectricGridGame";
 
 export default function ElectricGridPage() {
-  return <ElectricGridKiosk />;
+  return <ElectricGridGame />;
 }

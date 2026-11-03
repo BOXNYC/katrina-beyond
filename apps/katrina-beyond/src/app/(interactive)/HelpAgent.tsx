@@ -18,11 +18,14 @@ export type AgentAction = {
 export default function HelpAgent({
   tips,
   alert,
+  position = "bottom-right",
 }: {
   /** Ranked from most to least useful. */
   tips: string[];
   /** Something the agent says on its own, with optional buttons. */
   alert?: { text: string; actions?: AgentAction[] } | null;
+  /** Which corner the agent sits in. */
+  position?: "bottom-right" | "top-right";
 }) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -33,7 +36,9 @@ export default function HelpAgent({
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-40 flex max-w-md flex-col items-end gap-3"
+      className={`fixed right-4 z-40 flex max-w-md items-end gap-3 ${
+        position === "top-right" ? "top-4 flex-col-reverse" : "bottom-4 flex-col"
+      }`}
       aria-live="polite"
     >
       {bubbleOpen && (

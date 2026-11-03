@@ -1,4 +1,4 @@
-import { encode, type ModelLink, type ModelMessage } from "./modelProtocol";
+import { encodeSimulate, RESET_COMMAND, TERMINATOR, type ModelLink } from "./modelProtocol";
 
 // Where the model listens. Set EXPO_PUBLIC_MODEL_HOST / EXPO_PUBLIC_MODEL_PORT
 // (e.g. in .env) to point at it.
@@ -24,8 +24,9 @@ try {
 let socket: ReturnType<Tcp["createConnection"]> | null = null;
 let connected = false;
 let retry: ReturnType<typeof setTimeout> | null = null;
-/** Latest value per option, replayed on (re)connect so the model catches up. */
-const lastOptions = new Map<string, ModelMessage>();
+const resetListeners = new Set<() => void>();
+/** Incoming bytes not yet terminated by a carriage return. */
+let inbox = "";
 
 function scheduleRetry() {
   if (retry) return;
@@ -42,7 +43,6 @@ function connect() {
     s = TcpSocket.createConnection({ host: HOST, port: PORT }, () => {
       connected = true;
       console.log(`[model] connected to ${HOST}:${PORT}`);
-      for (const m of lastOptions.values()) s.write(encode(m));
     });
   } catch (e) {
     // The native side is missing: give up and just log.
@@ -51,8 +51,19 @@ function connect() {
     return;
   }
   socket = s;
+  s.on("data", (data) => {
+    inbox += data.toString();
+    const parts = inbox.split(TERMINATOR);
+    inbox = parts.pop() ?? "";
+    for (const part of parts) {
+      const command = part.trim();
+      console.log("[model] received", JSON.stringify(command));
+      if (command === RESET_COMMAND) resetListeners.forEach((l) => l());
+    }
+  });
   const drop = () => {
     connected = false;
+    inbox = "";
     socket = null;
     scheduleRetry();
   };
@@ -64,23 +75,18 @@ function connect() {
   s.on("close", drop);
 }
 
-function send(m: ModelMessage) {
-  console.log("[model]", encode(m).trimEnd());
-  if (m.command === "set") lastOptions.set(m.option, m);
-  if (m.command === "simulate") {
-    // The simulate message carries every option, so it supersedes the replay.
-    for (const [option, level] of Object.entries(m.options)) {
-      lastOptions.set(option, { command: "set", option: option as never, level });
-    }
-  }
-  connect();
-  // Not connected yet: the message is dropped, and options are replayed on connect.
-  if (connected && socket) socket.write(encode(m));
-}
-
 const modelLink: ModelLink = {
-  sendOption: (option, level) => send({ command: "set", option, level }),
-  sendSimulate: (severity, options) => send({ command: "simulate", severity, options }),
+  sendSimulate: (levels) => {
+    const message = encodeSimulate(levels);
+    console.log("[model]", JSON.stringify(message));
+    connect();
+    // Not connected: the message is dropped, there is no replay.
+    if (connected && socket) socket.write(message);
+  },
+  onReset: (listener) => {
+    resetListeners.add(listener);
+    return () => resetListeners.delete(listener);
+  },
 };
 
 connect();

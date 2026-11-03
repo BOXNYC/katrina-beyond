@@ -6,7 +6,11 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "ios:device": "cd apps/barrier-island && npx eas-cli@latest build --platform ios --profile adhoc",
+    "ios:sim": "pnpm --filter barrier-island exec expo run:ios",
+    "ios:web": "pnpm --filter barrier-island exec expo start --web",
+    "katrina:web": "pnpm --filter katrina-beyond dev"
   },
   "devDependencies": {
     "turbo": "^2"
