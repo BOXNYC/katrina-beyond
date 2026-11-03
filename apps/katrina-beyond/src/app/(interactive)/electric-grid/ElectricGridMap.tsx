@@ -1,6 +1,7 @@
 "use client";
 
-import { useImperativeHandle, useRef, type Ref, type SVGProps } from "react";
+import { useEffect, useImperativeHandle, useRef, type Ref, type SVGProps } from "react";
+import { createStormRadar, type StormRadar } from "./stormRadar";
 import InstructionBox, { type InstructionBoxHandle } from "./InstructionBox";
 import { FACILITY_BY_ID } from "@/lib/electricGridFacilities";
 import LevelBox, { type LevelBoxHandle } from "./LevelBox";
@@ -35,7 +36,7 @@ export type ElectricGridMapHandle = {
   setPath: (points: MapPoint[] | null) => void;
   /** Converts client (screen) coordinates to map units. */
   toMapPoint: (clientX: number, clientY: number) => MapPoint | null;
-  /** Sweeps a translucent storm overlay in from the left, covering the given zones. */
+  /** Fades in a WebGL Doppler radar storm over the given zones (one cell per zone, sized to the zone). */
   showStorm: (zones: (number | string)[], durationMs?: number) => void;
   /** Fades the storm overlay out. */
   hideStorm: (fadeMs?: number) => void;
@@ -47,47 +48,6 @@ export type ElectricGridMapHandle = {
 
 const FADE_MS = 500;
 
-/** Doppler reflectivity bands, outermost to core (light rain -> heavy rain -> hail). */
-const RADAR_BANDS = [
-  { color: "#4ade80", opacity: 0.4, scale: 1 },
-  { color: "#16a34a", opacity: 0.55, scale: 0.8 },
-  { color: "#facc15", opacity: 0.6, scale: 0.58 },
-  { color: "#f97316", opacity: 0.65, scale: 0.4 },
-  { color: "#dc2626", opacity: 0.7, scale: 0.24 },
-  { color: "#d946ef", opacity: 0.75, scale: 0.1 },
-];
-
-/** Fills `storm` with one weather-service style radar cell per zone box, each the size of its zone with soft, feathered edges. */
-function buildRadar(storm: SVGElement, boxes: DOMRect[]) {
-  let seed = Math.round(boxes.reduce((n, b) => n + b.x * 31 + b.y * 17 + b.width * 7 + b.height, 0)) % 2147483647 || 1;
-  const rand = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
-  storm.replaceChildren();
-  const sweep = document.createElementNS(SVG_NS, "g");
-  sweep.setAttribute("class", "storm-sweep");
-  const body = document.createElementNS(SVG_NS, "g");
-  body.setAttribute("filter", "url(#eg-radar)");
-  boxes.forEach((b) => {
-    const cx = b.x + b.width / 2;
-    const cy = b.y + b.height / 2;
-    const rx = b.width / 2;
-    const ry = b.height / 2;
-    const intensity = 0.55 + rand() * 0.45; // how many bands this cell reaches
-    RADAR_BANDS.forEach((band, i) => {
-      if (i / RADAR_BANDS.length > intensity) return;
-      const e = document.createElementNS(SVG_NS, "ellipse");
-      e.setAttribute("cx", String(cx + (rand() - 0.5) * rx * 0.3 * i));
-      e.setAttribute("cy", String(cy + (rand() - 0.5) * ry * 0.3 * i));
-      e.setAttribute("rx", String(rx * band.scale));
-      e.setAttribute("ry", String(ry * band.scale));
-      e.setAttribute("fill", band.color);
-      e.setAttribute("fill-opacity", String(band.opacity));
-      body.appendChild(e);
-    });
-  });
-  sweep.appendChild(body);
-  storm.appendChild(sweep);
-}
-
 /**
  * Icons are hidden by default. A zone's rect is what dims the map, so a shown zone's rect is hidden.
  * Zone color comes from --zone-color (black by default), or an inline fill on a single zone.
@@ -96,7 +56,6 @@ const CSS = [
   ".electric-grid-map { display: block; touch-action: none; user-select: none; -webkit-user-select: none; }",
   ".electric-grid-map use { opacity: 0; }",
   ".electric-grid-map .zones rect { fill: var(--zone-color, #010d4b); }",
-  ".electric-grid-map .storm { opacity: 0; }",
   ".electric-grid-map .pulse-ring { fill: none; stroke-width: 7; transform-box: fill-box; transform-origin: center; animation: eg-pulse 0.9s ease-out 2 forwards; }",
   ".electric-grid-map .static-ring { fill: none; stroke-width: 7; }",
   ".electric-grid-map .static-ring.hint { stroke: #fbbf24; animation: eg-throb 0.8s ease-in-out infinite alternate; }",
@@ -116,6 +75,16 @@ export default function ElectricGridMap({
 }: Omit<SVGProps<SVGSVGElement>, "ref"> & { ref?: Ref<ElectricGridMapHandle> }) {
   const svg = useRef<SVGSVGElement>(null);
   const timers = useRef<number[]>([]);
+  const stormCanvas = useRef<HTMLCanvasElement>(null);
+  const radar = useRef<StormRadar | null>(null);
+
+  useEffect(() => () => radar.current?.destroy(), []);
+
+  /** Created on first use so a remount never reuses a torn-down WebGL context. */
+  const getRadar = () => {
+    if (!radar.current && stormCanvas.current) radar.current = createStormRadar(stormCanvas.current);
+    return radar.current;
+  };
   const levelBox = useRef<LevelBoxHandle>(null);
   const instructionBox = useRef<InstructionBoxHandle>(null);
 
@@ -153,17 +122,6 @@ export default function ElectricGridMap({
     return ring;
   };
 
-  const setStormRect = (visible: boolean, transition: string, transform: string) => {
-    const storm = svg.current?.querySelector<SVGElement>(".storm");
-    const sweep = storm?.querySelector<SVGElement>(".storm-sweep");
-    if (!storm || !sweep) return;
-    // The storm group stays put; only the radar inside it sweeps across.
-    sweep.style.transition = transition;
-    sweep.style.transform = transform;
-    storm.style.transition = "none";
-    storm.style.opacity = visible ? "1" : "0";
-  };
-
   const hideIcons = () => {
     allIcons().forEach((el) => {
       el.style.transition = "none";
@@ -185,11 +143,7 @@ export default function ElectricGridMap({
       ringGroup("static-rings")?.replaceChildren();
       ringGroup("pulses")?.replaceChildren();
       ringGroup("path")?.querySelectorAll("path").forEach((p) => p.removeAttribute("d"));
-      const storm = svg.current?.querySelector<SVGElement>(".storm");
-      if (storm) {
-        storm.style.transition = "none";
-        storm.style.opacity = "0";
-      }
+      radar.current?.clear();
     },
     hideZones,
     hideIcons,
@@ -245,19 +199,10 @@ export default function ElectricGridMap({
     },
     showStorm(zones, durationMs = 3000) {
       const boxes = zones.map((z) => zoneEl(z)).filter(Boolean).map((el) => (el as unknown as SVGGraphicsElement).getBBox());
-      const storm = svg.current?.querySelector<SVGElement>(".storm");
-      if (!storm || !boxes.length) return;
-      const pad = 120; // room for the feathered edges
-      const right = Math.min(2927, Math.max(...boxes.map((b) => b.x + b.width)) + pad);
-      buildRadar(storm, boxes);
-      setStormRect(true, "none", `translateX(${-(right + 40)}px)`);
-      void storm.getBoundingClientRect(); // commit the start position before animating
-      setStormRect(true, `transform ${durationMs}ms cubic-bezier(0.25, 0.1, 0.25, 1)`, "translateX(0)");
+      if (boxes.length) getRadar()?.show(boxes, durationMs);
     },
     hideStorm(fadeMs = 1000) {
-      const rect = svg.current?.querySelector<SVGElement>(".storm");
-      if (rect) rect.style.transition = `opacity ${fadeMs}ms ease`;
-      if (rect) rect.style.opacity = "0";
+      radar.current?.hide(fadeMs);
     },
     setZoneColor(color, zones) {
       if (!zones) return svg.current?.style.setProperty("--zone-color", color);
@@ -304,11 +249,6 @@ export default function ElectricGridMap({
             <feFuncG type="linear" slope="0.55" />
             <feFuncB type="linear" slope="0.55" />
           </feComponentTransfer>
-        </filter>
-        <filter id="eg-radar" filterUnits="userSpaceOnUse" x={0} y={0} width={2927} height={1646} colorInterpolationFilters="sRGB">
-          <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves={4} seed={7} result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale={110} xChannelSelector="R" yChannelSelector="G" result="ragged" />
-          <feGaussianBlur in="ragged" stdDeviation={22} />
         </filter>
         <image id="icon-firestation" href="/electric-grid/icon-firestation.png" width={64} height={80} />
         <image id="icon-police" href="/electric-grid/icon-police.png" width={71} height={77} />
@@ -418,7 +358,6 @@ export default function ElectricGridMap({
             <rect x={667} y={803} width={398} height={408} mask="url(#zone-1-mask)" data-name="zone 1" opacity={0.678} />
           </g>
           <image href="/electric-grid/boundary-lines.png" x={0} y={0} width={2927} height={1646} data-name="BOUNDARY LINES" />
-          <g className="storm" pointerEvents="none" />
           <g className="police-fire-stations">
             <g className="fire-stations">
               <g className="fire-icons">
@@ -562,6 +501,13 @@ export default function ElectricGridMap({
           </g>
         </g>
       </svg>
+      <canvas
+        ref={stormCanvas}
+        width={1464}
+        height={823}
+        aria-hidden="true"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+      />
       <LevelBox ref={levelBox} />
       <InstructionBox ref={instructionBox} />
     </div>

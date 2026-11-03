@@ -67,11 +67,13 @@ Each facility type is used by one level (Level 6 uses two).
 
 ### 4.1 Intro
 1. "A storm is coming" message displays the storm's **severity**.
-2. A **storm overlay with a weather-service Doppler radar look**, sized to cover the zones with outages, moves in from the **left**.
-   - Made of rain cells with ragged, noisy edges (not a flat shape).
-   - Reflectivity color bands, outer to core: light green, green, yellow, orange, red, with a magenta hot spot in the strongest cells.
-   - Translucent so the map stays readable beneath it.
-   - **One radar cell per outage zone**, each the same size as its zone, with soft, feathered edges that fade out like a real Doppler return. Zones without outages get no storm. The cells are not masked to the zone shapes.
+2. A **storm with a weather-service Doppler radar look** fades in over the zones with outages. It does **not** slide in; it builds up in place and keeps churning while visible.
+   - Rendered with a **WebGL fragment shader on a `<canvas>` overlay** above the map (`stormRadar.ts`), not SVG. Falls back to no storm if WebGL is unavailable.
+   - Matches the reference footage in `radar.mp4`: textured, noisy rain cells with sharp banded reflectivity colors (not smooth blurs).
+   - Colors by intensity, outer to core: cyan fringe, light green, green, dark green, yellow, orange, red, with magenta/white hot spots.
+   - **Moves like a real radar loop**: the whole system drifts west to east (slightly north) while it's visible. The cells creep slowly along that heading and the rain texture streams through them faster. Movement is subtle; cells stay over their zones.
+   - Intensity = soft cell falloff + slowly drifting, domain-warped noise, quantized onto the color bands.
+   - **One cell per outage zone**, each the same size as its zone, with soft, feathered edges. Zones without outages get no storm. Cells are not masked to the zone shapes.
 3. Zones with outages appear, **animated with staggered delays**, then the storm fades out.
 
 ### 4.2 Levels
