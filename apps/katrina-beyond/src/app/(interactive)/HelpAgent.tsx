@@ -19,6 +19,7 @@ export default function HelpAgent({
   tips,
   alert,
   position = "bottom-right",
+  extraActions,
 }: {
   /** Ranked from most to least useful. */
   tips: string[];
@@ -26,6 +27,8 @@ export default function HelpAgent({
   alert?: { text: string; actions?: AgentAction[] } | null;
   /** Which corner the agent sits in. */
   position?: "bottom-right" | "top-right";
+  /** Extra buttons shown beside the tip controls when the player opens the agent. */
+  extraActions?: AgentAction[];
 }) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -58,6 +61,11 @@ export default function HelpAgent({
                 ))
               : (
                 <>
+                  {extraActions?.map((a) => (
+                    <BubbleButton key={a.label} onClick={a.onClick} secondary={a.secondary}>
+                      {a.label}
+                    </BubbleButton>
+                  ))}
                   {index < tips.length - 1 && (
                     <BubbleButton onClick={() => setIndex(index + 1)}>
                       {helpAgent.nextTipLabel}
@@ -81,7 +89,7 @@ export default function HelpAgent({
       {!showingAlert && !open && (
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-3 rounded-full bg-amber-300 py-2 pl-2 pr-6 text-xl font-semibold text-slate-900 shadow-lg transition-colors hover:bg-amber-200"
+          className="flex items-center gap-3 rounded-full bg-white py-2 pl-2 pr-6 text-xl font-semibold text-slate-900 shadow-lg transition-colors hover:bg-amber-200"
         >
           <Avatar />
           {helpAgent.openLabel}

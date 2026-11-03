@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, cheer, setMuted, tone, unlockAudio } from "@/lib/electricGridSound";
+import { buzz, cheer, tone, unlockAudio } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
@@ -71,11 +71,9 @@ export default function ElectricGridGame({
 
   const [phase, setPhase] = useState<Phase>("begin");
   const [level, setLevel] = useState<LevelNumber>(1);
-  const [progress, setProgress] = useState(0);
   const [storm, setStorm] = useState<Storm>(STORMS[0]);
   const [card, setCard] = useState(false);
   const [assist, setAssist] = useState("");
-  const [sound, setSound] = useState(true);
 
   useEffect(() => {
     const token = run;
@@ -107,7 +105,6 @@ export default function ElectricGridGame({
     map.current?.instruction.reset();
     setCard(false);
     setAssist("");
-    setProgress(0);
     go("begin");
   };
 
@@ -135,7 +132,6 @@ export default function ElectricGridGame({
     const ids = visibleFacilityIds(l.storm, n);
     l.candidates = ids.map((id) => FACILITY_BY_ID[id]);
     setLevel(n);
-    setProgress(0);
     clearFeedback();
     go("watch");
     map.current?.level.completeLevels(info.slots);
@@ -216,7 +212,6 @@ export default function ElectricGridGame({
     const note = 520 + l.progress * 60;
     window.setTimeout(() => tone(note, 250), i * 140);
     l.progress++;
-    setProgress(l.progress);
     map.current?.setRings("hint", []);
     setAssist("");
   };
@@ -335,11 +330,10 @@ export default function ElectricGridGame({
   };
 
   const info = LEVEL_INFO[level];
-  const steps = storm.levels[level];
   const tips =
     phase === "watch"
       ? [COPY.watching]
-      : [...info.tips, "Stuck? Press Replay outages to see the order again, or Show next step."];
+      : [...info.tips, "Stuck? Press Replay outages to see the order again, or tap Show next step."];
 
   return (
     <div
@@ -356,19 +350,6 @@ export default function ElectricGridGame({
           style={{ width: "100%", height: "auto", touchAction: "none" }}
         />
 
-        {phase !== "begin" && (
-          <button
-            onClick={() => {
-              setSound(!sound);
-              setMuted(sound);
-            }}
-            aria-label={sound ? "Mute sound" : "Unmute sound"}
-            className="absolute bottom-4 right-4 rounded-full bg-slate-900/80 px-4 py-2 text-xl text-white"
-          >
-            {sound ? "🔊" : "🔇"}
-          </button>
-        )}
-
         {phase === "watch" && (
           <p className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-slate-950/80 px-6 py-3 text-2xl text-amber-200">
             {COPY.watching}
@@ -376,17 +357,12 @@ export default function ElectricGridGame({
         )}
 
         {(phase === "play" || phase === "watch") && (
-          <div className="absolute bottom-4 left-4 flex items-center gap-3">
-            <ControlButton onClick={replay} disabled={phase !== "play"}>
-              {COPY.replay}
-            </ControlButton>
-            <ControlButton onClick={showNext} disabled={phase !== "play"}>
-              {COPY.nextStep}
-            </ControlButton>
-            <p className="rounded-full bg-slate-950/80 px-4 py-2 text-lg text-slate-200">
-              {info.title}: {Math.min(progress + 1, steps.length)} of {steps.length}
-            </p>
-          </div>
+          <>
+            {/* Just right of the instruction panel (which ends at ~88.9% of the map width). */}
+            <div className="absolute bottom-4 right-2 flex justify-center" style={{ left: "89.6%" }}>
+              <PlayButton onClick={replay} disabled={phase !== "play"} label={COPY.replay} />
+            </div>
+          </>
         )}
 
         {phase === "begin" && (
@@ -422,6 +398,7 @@ export default function ElectricGridGame({
           position="top-right"
           key={`${level}-${phase === "watch"}-${assist}`}
           tips={tips}
+          extraActions={phase === "play" ? [{ label: COPY.nextStep, onClick: showNext }] : undefined}
           alert={assist ? { text: assist, actions: [{ label: "Got it", onClick: () => setAssist("") }] } : null}
         />
       )}
@@ -435,14 +412,19 @@ function Card({ children }: { children: React.ReactNode }) {
   return <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-950/80 p-10 text-center text-white">{children}</div>;
 }
 
-function ControlButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+/** Round play button that replays the outage order. */
+function PlayButton({ onClick, disabled, label }: { onClick: () => void; disabled?: boolean; label: string }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="min-h-14 rounded-full bg-slate-800/90 px-6 text-lg font-semibold text-white hover:bg-slate-700 disabled:opacity-40"
+      aria-label={label}
+      title={label}
+      className="flex size-16 items-center justify-center rounded-full bg-slate-800/90 text-white hover:bg-slate-700 disabled:opacity-40"
     >
-      {children}
+      <svg viewBox="0 0 24 24" className="size-8" fill="currentColor" aria-hidden="true">
+        <path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14z" />
+      </svg>
     </button>
   );
 }
