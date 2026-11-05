@@ -118,7 +118,7 @@ export default function ElectricGridTest() {
             padding: 4,
             background: "#fff",
             color: "#111",
-            font: "13px system-ui, sans-serif",
+            font: '13px "Helvetica Neue", Helvetica, Arial, sans-serif',
             borderRadius: 6,
             boxShadow: "0 4px 16px rgba(0,0,0,.4)",
             zIndex: 10,

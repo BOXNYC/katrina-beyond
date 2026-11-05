@@ -87,14 +87,18 @@ Each facility type is used by one level (Level 6 uses two).
 | 5 | Circle | Shelters | Each group, in the order each group lost power | Levels 1–5 | 5th |
 | 6 | Tap | Police **and** Fire stations | Each facility, in outage order | Levels 1–6 (all) | 6th |
 
-The level indicator is cumulative: it reveals one more level each time the player advances. Its progress bar fills to (lit levels / 7), and a short message (`LEVEL_INFO[n].message`, placeholder copy in `src/lib/electricGridStorms.ts`) is shown under it. When a level is completed the lit level icons pulse; completing level 3 (water) also reveals the water exit paths (`EXIT_PATHS_LEVEL` in `ElectricGridGame.tsx`), hidden again when level 4 starts. The instruction panel has an in-panel replay button (shown during watch/play) that replays the outage order.
+The level indicator is cumulative: it reveals one more level each time the player advances. Its progress bar fills to (lit levels / 7), and a short message (`LEVEL_INFO[n].message`, placeholder copy in `src/lib/electricGridStorms.ts`) is shown under it. The message is typed out character by character with a cursor that disappears when typing finishes (instant with `prefers-reduced-motion`). Every level completion has a payoff: the lit level icons pulse and every restored facility icon throbs (scales up and down), each with its own duration and delay derived from its id so the timing is uneven but stable. Completing level 3 (water) also reveals the water exit paths (`EXIT_PATHS_LEVEL` in `ElectricGridGame.tsx`), hidden again when level 4 starts. Only the flows whose water icons are all visible on the map are shown (a flow that would start at a hidden icon is skipped), fading in one after another. The instruction panel has an in-panel replay button (shown during watch/play) that replays the outage order.
 
 **Icons per level:** when a new level begins, only that level's facility icons are shown. Icons from previous levels are hidden (along with any hint, selection and pulse rings) before the new level's icons fade in. Restored/outage states do not carry over between levels.
 
 ### 4.3 Outro
-1. When the game completes, **all zones turn off**.
-2. A completion message is shown.
-3. A button appears to exit; pressing it **restarts the experience** at the **"Begin"** button.
+1. When the game completes, **all icons hide**.
+2. **All active zones turn off** one at a time, from the map center outward and counter-clockwise: zones are grouped into 400-unit distance bands from the map center, and within a band go counter-clockwise (on screen) starting from due east (`hideZonesOutward`).
+3. **Every icon returns, with the water flow directions**, all icons throbbing with staggered timing.
+4. A completion message is shown.
+5. A button appears to exit; pressing it **restarts the experience** at the **"Begin"** button.
+
+All text uses Helvetica Neue (falling back to Helvetica, Arial, sans-serif); the Geist fonts were removed from the app.
 
 ---
 

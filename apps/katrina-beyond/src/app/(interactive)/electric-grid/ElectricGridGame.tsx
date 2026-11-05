@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, cheer, tone, unlockAudio } from "@/lib/electricGridSound";
+import { FACILITIES, FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
+import { buzz, cheer, playStorm, preloadStorm, stopStorm, tone, unlockAudio } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
@@ -27,14 +27,22 @@ const OUTAGE_COLOR = "#f87171";
 const RESTORED_COLOR = "#4ade80";
 /**
  * The level whose completion reveals the water exit paths. Assumption: "on the 3rd level the water exits
- * is displayed" means shown as that level's completion reward. To show them for the whole of level 3 while
+ * is displayed" means shown as that level's completion reward. Only flows whose water icons are all on the map
+ * (in this storm's zones) are drawn, so no flow starts from an icon the player can't see. To show them for the whole of level 3 while
  * playing instead, call showExitPaths in startLevel(EXIT_PATHS_LEVEL) and drop it from finishLevel.
  */
 const EXIT_PATHS_LEVEL: LevelNumber = 3;
-/** Completion beat before the next level starts; the level-box pulse (900ms) must finish inside it. */
-const LEVEL_DONE_MS = 1500;
-/** Longer beat when the exit paths are revealed, so they can be seen. */
-const EXIT_PATHS_DONE_MS = 3500;
+/**
+ * Completion beat (the payoff) before the next level starts; the level-box pulse (900ms) and the icon throb (up to
+ * ~700ms delay + 2 x 1100ms) must finish inside it.
+ */
+const LEVEL_DONE_MS = 3000;
+/** Longer beat when the exit paths are revealed (they fade in one after another), so they can be seen. */
+const EXIT_PATHS_DONE_MS = 4500;
+/** Outro: pause with every icon hidden, gap between zones switching off, and how long the final reveal plays before the card. */
+const OUTRO_HIDDEN_MS = 1000;
+const OUTRO_ZONE_MS = 300;
+const OUTRO_REVEAL_MS = 4000;
 
 type Gesture =
   | { kind: "connect"; pointerId: number; chain: string[] }
@@ -88,6 +96,7 @@ export default function ElectricGridGame({
 
   const reset = () => {
     run.current++;
+    stopStorm();
     gesture.current = null;
     map.current?.reset();
     map.current?.level.reset();
@@ -141,10 +150,16 @@ export default function ElectricGridGame({
     map.current?.instruction.hideReplay();
     map.current?.message.hideMessage();
     map.current?.hideExitPaths(true);
-    if (!(await wait(800, token))) return;
-    map.current?.hideZones(true);
-    map.current?.hideFacilities(true);
-    if (!(await wait(1500, token))) return;
+    map.current?.hideFacilities(true); // 1. every icon off
+    if (!(await wait(OUTRO_HIDDEN_MS, token))) return;
+    const zones = stormZones(live.current.storm);
+    map.current?.hideZonesOutward(zones, OUTRO_ZONE_MS); // 2. zones off, center out, counter-clockwise
+    if (!(await wait(zones.length * OUTRO_ZONE_MS + 1000, token))) return;
+    const all = FACILITIES.map((f) => f.id); // 3. every icon back, with the water flows, all throbbing
+    map.current?.setFacilities(all, "ok", true);
+    map.current?.showExitPaths(true);
+    map.current?.throb(all, 3);
+    if (!(await wait(OUTRO_REVEAL_MS, token))) return;
     setCard(true);
   };
 
@@ -156,8 +171,10 @@ export default function ElectricGridGame({
     map.current?.instruction.hideMessage();
     map.current?.instruction.hideReplay();
     map.current?.level.pulse(LEVEL_INFO[n].slots);
+    // Payoff: every restored icon throbs; the water level also shows the flows between its (visible) icons.
+    map.current?.throb([...live.current.restored]);
     const revealPaths = n === EXIT_PATHS_LEVEL;
-    if (revealPaths) map.current?.showExitPaths(true);
+    if (revealPaths) map.current?.showExitPaths(true, visibleFacilityIds(live.current.storm, n));
     if (!(await wait(revealPaths ? EXIT_PATHS_DONE_MS : LEVEL_DONE_MS, token))) return;
     if (n < 6) await startLevel((n + 1) as LevelNumber, token);
     else await outro(token);
@@ -165,6 +182,7 @@ export default function ElectricGridGame({
 
   const begin = () => {
     unlockAudio();
+    preloadStorm();
     go("choose");
   };
 
@@ -180,6 +198,7 @@ export default function ElectricGridGame({
     map.current?.message.reset();
     go("intro");
     setCard(true);
+    playStorm();
     if (!(await wait(3600, token))) return;
     setCard(false);
     const zones = stormZones(next);

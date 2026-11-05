@@ -36,7 +36,7 @@ export type InstructionBoxHandle = {
   /**
    * Fades the current instruction out and a text message in inside the box (the container and replay button stay).
    * One message at a time: a new one replaces the old. It stays until hideMessage() (the game calls it on the next
-   * input) or MESSAGE_MS passes after the text has finished typing (character by character, with a trailing caret), then the
+   * input) or MESSAGE_MS passes after the text has finished typing (character by character, with a trailing caret that disappears when typing ends), then the
    * instruction that was showing comes back.
    */
   showMessage: (text: string, transition?: boolean) => void;
@@ -185,9 +185,14 @@ export default function InstructionBox({
     return { lines: typed, size };
   };
 
-  /** Types the lines out one character at a time with the caret trailing, then calls `done`. The caret stays after. */
-  const typeMessage = ({ lines, size }: { lines: TypedLine[]; size: number }, done: () => void) => {
+  /** Types the lines out one character at a time with the caret trailing, then calls `done`. The caret is hidden once typing finishes. */
+  const typeMessage = ({ lines, size }: { lines: TypedLine[]; size: number }, finished: () => void) => {
     const cursor = cursorEl();
+    if (cursor) cursor.style.visibility = "visible";
+    const done = () => {
+      if (cursor) cursor.style.visibility = "hidden";
+      finished();
+    };
     const place = (line: TypedLine) => {
       if (!cursor) return;
       const w = Math.max(3, size * 0.08);

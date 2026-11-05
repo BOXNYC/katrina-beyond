@@ -3,7 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, type Ref, type SVGProps } from "react";
 import { createStormRadar, type StormRadar } from "./stormRadar";
 import InstructionBox, { type InstructionBoxHandle } from "./InstructionBox";
-import { FACILITY_BY_ID } from "@/lib/electricGridFacilities";
+import { FACILITIES, FACILITY_BY_ID } from "@/lib/electricGridFacilities";
 import LevelBox, { type LevelBoxHandle } from "./LevelBox";
 import LevelMessage, { type LevelMessageHandle } from "./LevelMessage";
 
@@ -19,6 +19,12 @@ export type ElectricGridMapHandle = {
   showZones: (zones: (number | string)[], transition?: boolean, delay?: number | null) => void;
   /** Hides all zones, instantly unless `transition` is true. */
   hideZones: (transition?: boolean) => void;
+  /**
+   * Fades the given zones out one after another, `delay` ms apart, from the map center outward. Zones are grouped
+   * into rings by distance from the center (ZONE_RING units wide); within a ring they go counter-clockwise (as seen
+   * on screen) starting from due east.
+   */
+  hideZonesOutward: (zones: (number | string)[], delay?: number) => void;
   /** Shows only the given icon types (hides all others first). */
   showIcons: (names: IconName | IconName[]) => void;
   /** Hides all icons. */
@@ -29,6 +35,12 @@ export type ElectricGridMapHandle = {
   setFacilities: (ids: string[], state: FacilityState, transition?: boolean) => void;
   /** Hides every facility icon. */
   hideFacilities: (transition?: boolean) => void;
+  /**
+   * Throbs (scales up and down) the given facility icons, each with its own duration and delay (derived from its id,
+   * so they are stable across renders). Stops by itself after `iterations`, or runs until the icons are hidden when
+   * "infinite". Does not change the icons' visibility.
+   */
+  throb: (ids: string[], iterations?: number | "infinite") => void;
   /** Plays a radar-blip pulse over the given facilities. */
   pulse: (ids: string[], color?: string) => void;
   /** Draws persistent rings on facilities. "hint" marks the expected one, "select" marks what a loop currently encloses. */
@@ -41,8 +53,11 @@ export type ElectricGridMapHandle = {
   showStorm: (zones: (number | string)[], durationMs?: number) => void;
   /** Fades the storm overlay out. */
   hideStorm: (fadeMs?: number) => void;
-  /** Fades in the dotted exit-path routes (hidden by default). */
-  showExitPaths: (transition?: boolean) => void;
+  /**
+   * Fades in the dotted exit-path routes (hidden by default). With `visibleIds`, only the flows whose water icons
+   * (where each starts, and where it ends if it ends on one) are all in that list show, staggered.
+   */
+  showExitPaths: (transition?: boolean, visibleIds?: string[]) => void;
   /** Hides the exit paths, instantly unless `transition` is true. */
   hideExitPaths: (transition?: boolean) => void;
   /** The level completion display laid over the map. */
@@ -64,6 +79,7 @@ const CSS = [
   ".electric-grid-map { display: block; touch-action: none; user-select: none; -webkit-user-select: none; }",
   ".electric-grid-map use { opacity: 0; }",
   ".electric-grid-map .exit-paths { opacity: 0; }",
+  ".electric-grid-map use.icon-throb { transform-box: view-box; transform-origin: var(--throb-origin, 0 0); animation: eg-icon-throb var(--throb-dur, 0.8s) ease-in-out var(--throb-delay, 0s) var(--throb-count, 2); }",
   ".electric-grid-map .zones rect { fill: var(--zone-color, #1e00fc); }",
   ".electric-grid-map .pulse-ring { fill: none; stroke-width: 7; transform-box: fill-box; transform-origin: center; animation: eg-pulse 0.9s ease-out 2 forwards; }",
   ".electric-grid-map .static-ring { fill: none; stroke-width: 7; }",
@@ -71,10 +87,28 @@ const CSS = [
   ".electric-grid-map .static-ring.select { stroke: #67e8f9; }",
   "@keyframes eg-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }",
   "@keyframes eg-throb { from { opacity: 0.4; } to { opacity: 1; } }",
+  "@keyframes eg-icon-throb { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.75); } }",
+  "@media (prefers-reduced-motion: reduce) { .electric-grid-map use.icon-throb { animation: none; } }",
 ].join(" ");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const RING_R = 44;
+const MAP_CENTER = { x: 2932 / 2, y: 1648 / 2 };
+/** Width (map units) of the distance bands hideZonesOutward sweeps through. */
+const ZONE_RING = 400;
+/** A flow starts/ends on a water icon if its endpoint is within this many map units of it. */
+const FLOW_SNAP = 60;
+/** Delay between flows fading in when only some are shown. */
+const FLOW_STAGGER_MS = 150;
+
+type Flow = { els: SVGElement[]; icons: string[] };
+
+/** Stable per-id pseudo-random number (FNV-1a), so throb timing doesn't change between renders. */
+function hash(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
 
 /** Generated from map-v1.psd (visible layers only; zones blue, exit paths included). Group names become classNames. */
 export default function ElectricGridMap({
@@ -133,16 +167,51 @@ export default function ElectricGridMap({
     return ring;
   };
 
+  const flows = useRef<Flow[] | null>(null);
+  /**
+   * Pairs each exit path with its arrowhead image (the one nearest its end) and the water icons it touches (where it
+   * starts, and where it ends if that is on an icon). Measured from the rendered paths on first use.
+   */
+  const getFlows = (): Flow[] => {
+    if (flows.current) return flows.current;
+    const root = exitPaths();
+    if (!root) return [];
+    const water = FACILITIES.filter((f) => f.type === "water");
+    const near = (x: number, y: number) => water.find((f) => Math.hypot(f.x - x, f.y - y) < FLOW_SNAP)?.id;
+    const arrows = [...root.querySelectorAll<SVGImageElement>("image")].map((el) => ({
+      el,
+      x: el.x.baseVal.value + el.width.baseVal.value / 2,
+      y: el.y.baseVal.value + el.height.baseVal.value / 2,
+    }));
+    flows.current = [...root.querySelectorAll<SVGPathElement>("path")].map((path) => {
+      const a = path.getPointAtLength(0);
+      const b = path.getPointAtLength(path.getTotalLength());
+      const arrow = arrows.find((r) => Math.hypot(r.x - b.x, r.y - b.y) < 70);
+      return {
+        els: arrow ? [path, arrow.el] : [path],
+        icons: [near(a.x, a.y), near(b.x, b.y)].filter((id): id is string => !!id),
+      };
+    });
+    return flows.current;
+  };
+
   const exitPaths = () => svg.current?.querySelector<SVGElement>(".exit-paths");
   const hideExitPaths = (transition = false) => {
     const el = exitPaths();
     if (!el) return;
     el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
     el.style.removeProperty("opacity");
+    flows.current?.forEach((f) =>
+      f.els.forEach((e) => {
+        e.style.removeProperty("opacity");
+        e.style.removeProperty("transition-delay");
+      }),
+    );
   };
 
   const hideIcons = () => {
     allIcons().forEach((el) => {
+      el.classList.remove("icon-throb");
       el.style.transition = "none";
       el.style.removeProperty("opacity");
       el.style.removeProperty("filter");
@@ -171,11 +240,62 @@ export default function ElectricGridMap({
     hideZones,
     hideIcons,
     hideExitPaths,
-    showExitPaths(transition = true) {
+    showExitPaths(transition = true, visibleIds) {
       const el = exitPaths();
       if (!el) return;
+      const only = visibleIds && new Set(visibleIds);
+      let n = 0;
+      getFlows().forEach((f) => {
+        const on = !only || f.icons.every((id) => only.has(id));
+        f.els.forEach((e) => {
+          e.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
+          e.style.transitionDelay = transition && on && only ? `${n * FLOW_STAGGER_MS}ms` : "0ms";
+          e.style.opacity = on ? "1" : "0";
+        });
+        if (on) n++;
+      });
       el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
       el.style.opacity = "1";
+    },
+    hideZonesOutward(zones, delay = 250) {
+      clearTimers();
+      const polar = zones.flatMap((zone) => {
+        const el = zoneEl(zone);
+        if (!el) return [];
+        const b = (el as unknown as SVGGraphicsElement).getBBox();
+        const dx = b.x + b.width / 2 - MAP_CENTER.x;
+        const dy = MAP_CENTER.y - (b.y + b.height / 2); // screen y points down
+        const angle = (Math.atan2(dy, dx) + 2 * Math.PI) % (2 * Math.PI);
+        return [{ el, ring: Math.floor(Math.hypot(dx, dy) / ZONE_RING), angle }];
+      });
+      polar.sort((a, b) => a.ring - b.ring || a.angle - b.angle);
+      polar.forEach(({ el }, i) => {
+        timers.current.push(
+          window.setTimeout(() => {
+            el.style.transition = `opacity ${FADE_MS}ms ease`;
+            el.style.removeProperty("opacity");
+          }, i * delay),
+        );
+      });
+    },
+    throb(ids, iterations = 2) {
+      ids.forEach((id) => {
+        const el = facilityEl(id);
+        if (!el) return;
+        const h = hash(id);
+        // <use> has no reliable fill-box, so pivot on the icon's center in user units (otherwise it scales from the SVG origin and slides)
+        const icon = svg.current?.querySelector<SVGImageElement>(el.getAttribute("href") ?? "");
+        const cx = Number(el.getAttribute("x")) + (icon?.width.baseVal.value ?? 0) / 2;
+        const cy = Number(el.getAttribute("y")) + (icon?.height.baseVal.value ?? 0) / 2;
+        el.style.setProperty("--throb-origin", `${cx}px ${cy}px`);
+        el.style.setProperty("--throb-dur", `${500 + (h % 600)}ms`);
+        el.style.setProperty("--throb-delay", `${(h >>> 10) % 700}ms`);
+        el.style.setProperty("--throb-count", String(iterations));
+        el.classList.remove("icon-throb");
+        void el.getBoundingClientRect(); // restart the animation
+        el.classList.add("icon-throb");
+        if (iterations !== "infinite") el.addEventListener("animationend", () => el.classList.remove("icon-throb"), { once: true });
+      });
     },
     setFacilities(ids, state, transition = true) {
       ids.forEach((id) => {
@@ -194,6 +314,7 @@ export default function ElectricGridMap({
     },
     hideFacilities(transition = false) {
       svg.current?.querySelectorAll<SVGElement>("use[data-fid]").forEach((el) => {
+        el.classList.remove("icon-throb");
         el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
         el.style.removeProperty("opacity");
         el.style.removeProperty("filter");
