@@ -15,11 +15,11 @@ import {
   type Storm,
 } from "@/lib/electricGridStorms";
 import AreYouStillThere from "../AreYouStillThere";
-import HelpAgent from "../HelpAgent";
 import { useIdlePrompt } from "../useIdlePrompt";
+import StormPicker from "./StormPicker";
 import ElectricGridMap, { type ElectricGridMapHandle, type MapPoint } from "./ElectricGridMap";
 
-type Phase = "begin" | "intro" | "watch" | "play" | "levelDone" | "outro";
+type Phase = "begin" | "choose" | "intro" | "watch" | "play" | "levelDone" | "outro";
 
 /** How close (map units) a touch must land to a facility to count as on it. */
 const HIT_RADIUS = 64;
@@ -35,24 +35,6 @@ const EXIT_PATHS_LEVEL: LevelNumber = 3;
 const LEVEL_DONE_MS = 1500;
 /** Longer beat when the exit paths are revealed, so they can be seen. */
 const EXIT_PATHS_DONE_MS = 3500;
-const STORM_KEY = "electric-grid-last-storm";
-
-let memoryStorm = -1;
-
-/** Storms rotate each play, remembered across page loads when storage is available. */
-function nextStormIndex() {
-  let last = memoryStorm;
-  try {
-    const stored = window.localStorage.getItem(STORM_KEY);
-    if (stored !== null) last = Number(stored);
-  } catch {}
-  const next = last < 0 || Number.isNaN(last) ? Math.floor(Math.random() * STORMS.length) : (last + 1) % STORMS.length;
-  memoryStorm = next;
-  try {
-    window.localStorage.setItem(STORM_KEY, String(next));
-  } catch {}
-  return next;
-}
 
 type Gesture =
   | { kind: "connect"; pointerId: number; chain: string[] }
@@ -80,10 +62,8 @@ export default function ElectricGridGame({
   });
 
   const [phase, setPhase] = useState<Phase>("begin");
-  const [level, setLevel] = useState<LevelNumber>(1);
   const [storm, setStorm] = useState<Storm>(STORMS[0]);
   const [card, setCard] = useState(false);
-  const [assist, setAssist] = useState("");
 
   useEffect(() => {
     const token = run;
@@ -104,7 +84,6 @@ export default function ElectricGridGame({
     map.current?.setRings("hint", []);
     map.current?.setRings("select", []);
     map.current?.setPath(null);
-    setAssist("");
   };
 
   const reset = () => {
@@ -115,7 +94,6 @@ export default function ElectricGridGame({
     map.current?.instruction.reset();
     map.current?.message.reset();
     setCard(false);
-    setAssist("");
     go("begin");
   };
 
@@ -142,7 +120,6 @@ export default function ElectricGridGame({
     l.restored = new Set();
     const ids = visibleFacilityIds(l.storm, n);
     l.candidates = ids.map((id) => FACILITY_BY_ID[id]);
-    setLevel(n);
     clearFeedback();
     go("watch");
     map.current?.hideExitPaths(true);
@@ -176,6 +153,7 @@ export default function ElectricGridGame({
     go("levelDone");
     cheer();
     const n = live.current.level;
+    map.current?.instruction.hideMessage();
     map.current?.instruction.hideReplay();
     map.current?.level.pulse(LEVEL_INFO[n].slots);
     const revealPaths = n === EXIT_PATHS_LEVEL;
@@ -185,10 +163,15 @@ export default function ElectricGridGame({
     else await outro(token);
   };
 
-  const begin = async () => {
+  const begin = () => {
     unlockAudio();
+    go("choose");
+  };
+
+  const pickStorm = async (index: number) => {
+    if (live.current.phase !== "choose") return;
     const token = ++run.current;
-    const next = STORMS[nextStormIndex()];
+    const next = STORMS[index];
     live.current.storm = next;
     setStorm(next);
     map.current?.reset();
@@ -213,17 +196,12 @@ export default function ElectricGridGame({
     if (live.current.phase !== "play") return;
     const token = run.current;
     clearFeedback();
+    map.current?.instruction.hideMessage();
     go("watch");
     if (await playOutages(live.current.level, token, false)) go("play");
   };
 
   const expectedIds = () => live.current.storm.levels[live.current.level][live.current.progress]?.facilityIds ?? [];
-
-  const showNext = () => {
-    if (live.current.phase !== "play") return;
-    map.current?.setRings("hint", expectedIds());
-    setAssist("The next one to restore is circled on the map.");
-  };
 
   /** Restores the next outage step in order. `i` staggers the sound when several land at once. */
   const restoreStep = (i = 0) => {
@@ -236,13 +214,12 @@ export default function ElectricGridGame({
     window.setTimeout(() => tone(note, 250), i * 140);
     l.progress++;
     map.current?.setRings("hint", []);
-    setAssist("");
   };
 
   const wrong = (message: string) => {
     buzz();
     map.current?.setRings("hint", expectedIds());
-    setAssist(message);
+    map.current?.instruction.showMessage(message);
   };
 
   const afterSubmit = () => {
@@ -293,6 +270,7 @@ export default function ElectricGridGame({
 
   const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (live.current.phase !== "play" || gesture.current) return;
+    map.current?.instruction.hideMessage(); // the mistake message gives way to the instruction on the next input
     const p = mapPoint(e);
     if (!p) return;
     const { interaction } = LEVEL_INFO[live.current.level];
@@ -352,12 +330,6 @@ export default function ElectricGridGame({
     else if (g.points.length >= 6) submitGroup(g.enclosed);
   };
 
-  const info = LEVEL_INFO[level];
-  const tips =
-    phase === "watch"
-      ? [COPY.watching]
-      : [...info.tips, "Stuck? Press Replay outages to see the order again, or tap Show next step."];
-
   return (
     <div
       className="relative flex min-h-screen select-none items-center justify-center bg-black"
@@ -388,6 +360,8 @@ export default function ElectricGridGame({
           </button>
         )}
 
+        {phase === "choose" && <StormPicker storms={STORMS} onPick={pickStorm} onBack={() => go("begin")} />}
+
         {phase === "intro" && card && (
           <Card>
             <p className="text-2xl uppercase tracking-widest text-slate-300">{COPY.stormComing}</p>
@@ -407,16 +381,6 @@ export default function ElectricGridGame({
           </Card>
         )}
       </div>
-
-      {(phase === "watch" || phase === "play" || phase === "levelDone") && (
-        <HelpAgent
-          position="top-right"
-          key={`${level}-${phase === "watch"}-${assist}`}
-          tips={tips}
-          extraActions={phase === "play" ? [{ label: COPY.nextStep, onClick: showNext }] : undefined}
-          alert={assist ? { text: assist, actions: [{ label: "Got it", onClick: () => setAssist("") }] } : null}
-        />
-      )}
 
       {idle.prompting && <AreYouStillThere secondsLeft={idle.secondsLeft} onStay={idle.stay} />}
     </div>

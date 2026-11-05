@@ -21,7 +21,6 @@ export type LevelInfo = {
   /** Level-indicator slots (1-based) lit once this level starts. */
   slots: number[];
   title: string;
-  tips: string[];
 };
 
 export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
@@ -32,7 +31,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level one... restoration of\npower to the region",
     slots: [1],
     title: "Power stations",
-    tips: ["Watch which power stations go dark, and in what order.", "Tap the dark power stations in the same order they lost power."],
   },
   2: {
     interaction: "connect",
@@ -41,7 +39,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level two... reconnecting the\npower grid across the region",
     slots: [1, 2],
     title: "Transmission lines",
-    tips: ["Press the first dark station, then drag to the next one, and the next, without lifting your finger.", "Lift your finger when you reach the last one."],
   },
   3: {
     interaction: "circle",
@@ -50,7 +47,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level three... restoration of\nwater to the region",
     slots: [1, 2, 3],
     title: "Water facilities",
-    tips: ["Some stations lose power together. Draw a loop around each dark group.", "Circle the groups in the order they lost power."],
   },
   4: {
     interaction: "tap",
@@ -59,7 +55,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level four... restoration of\npower to the hospitals",
     slots: [1, 2, 3, 4],
     title: "Hospitals",
-    tips: ["Hospitals first! Tap each dark hospital in the order they lost power."],
   },
   5: {
     interaction: "circle",
@@ -68,7 +63,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level five... restoration of\npower to the shelters",
     slots: [1, 2, 3, 4, 5],
     title: "Shelters",
-    tips: ["Draw a loop around each group of dark shelters, in the order they lost power."],
   },
   6: {
     interaction: "tap",
@@ -77,7 +71,6 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     message: "level six... restoration of\npolice and fire stations",
     slots: [1, 2, 3, 4, 5, 6, 7],
     title: "Police and fire stations",
-    tips: ["Tap each dark police and fire station in the order they lost power."],
   },
 };
 
@@ -252,7 +245,6 @@ export const COPY = {
   outroBody: "You restored power in the same order it was lost. Real crews do this every storm: hospitals, water and shelters first, so people stay safe.",
   exit: "Exit",
   replay: "Replay outages",
-  nextStep: "Show next step",
   watching: "Watch the order the power goes out...",
   tooMany: "That loop caught too many. Circle up to 4 at a time.",
 };

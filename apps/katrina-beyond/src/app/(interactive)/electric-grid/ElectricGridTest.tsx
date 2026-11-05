@@ -69,6 +69,8 @@ const groups: [title: string, actions: Action[]][] = [
       ["showInstruction 1 (number)", (m) => m.instruction.showInstruction(1)],
       ["showReplay", (m) => m.instruction.showReplay()],
       ["hideReplay", (m) => m.instruction.hideReplay()],
+      ["showMessage (sample mistake)", (m) => m.instruction.showMessage("That wasn't the group that lost power second. Circle only the dark ones that went out together, in order.")],
+      ["hideMessage", (m) => m.instruction.hideMessage()],
       ["hide", (m) => m.instruction.hideInstruction()],
       ["reset", (m) => m.instruction.reset()],
     ],

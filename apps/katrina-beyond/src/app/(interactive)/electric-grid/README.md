@@ -122,7 +122,7 @@ type Storm = {
 };
 ```
 
-- 4 `Storm` definitions: how a storm is chosen each play (rotating).
+- 4 `Storm` definitions: the player picks one each play from a "Choose a storm" modal shown after Begin (no rotation); it lists name, severity and number of areas hit, and Back/Escape returns to the begin card.
 
 ---
 
