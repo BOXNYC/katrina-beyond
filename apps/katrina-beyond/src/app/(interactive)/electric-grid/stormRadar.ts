@@ -1,6 +1,6 @@
 /** Map units the shader's zone cells are expressed in (matches the SVG viewBox). */
-const MAP_W = 2927;
-const MAP_H = 1646;
+const MAP_W = 2932;
+const MAP_H = 1648;
 const MAX_CELLS = 24;
 
 const VERT = `attribute vec2 a; varying vec2 vUv; void main() { vUv = a * 0.5 + 0.5; gl_Position = vec4(a, 0.0, 1.0); }`;

@@ -87,7 +87,7 @@ Each facility type is used by one level (Level 6 uses two).
 | 5 | Circle | Shelters | Each group, in the order each group lost power | Levels 1–5 | 5th |
 | 6 | Tap | Police **and** Fire stations | Each facility, in outage order | Levels 1–6 (all) | 6th |
 
-The level indicator is cumulative: it reveals one more level each time the player advances.
+The level indicator is cumulative: it reveals one more level each time the player advances. Its progress bar fills to (lit levels / 7), and a short message (`LEVEL_INFO[n].message`, placeholder copy in `src/lib/electricGridStorms.ts`) is shown under it. When a level is completed the lit level icons pulse; completing level 3 (water) also reveals the water exit paths (`EXIT_PATHS_LEVEL` in `ElectricGridGame.tsx`), hidden again when level 4 starts. The instruction panel has an in-panel replay button (shown during watch/play) that replays the outage order.
 
 **Icons per level:** when a new level begins, only that level's facility icons are shown. Icons from previous levels are hidden (along with any hint, selection and pulse rings) before the new level's icons fade in. Restored/outage states do not carry over between levels.
 

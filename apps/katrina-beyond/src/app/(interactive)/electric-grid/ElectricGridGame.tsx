@@ -25,6 +25,16 @@ type Phase = "begin" | "intro" | "watch" | "play" | "levelDone" | "outro";
 const HIT_RADIUS = 64;
 const OUTAGE_COLOR = "#f87171";
 const RESTORED_COLOR = "#4ade80";
+/**
+ * The level whose completion reveals the water exit paths. Assumption: "on the 3rd level the water exits
+ * is displayed" means shown as that level's completion reward. To show them for the whole of level 3 while
+ * playing instead, call showExitPaths in startLevel(EXIT_PATHS_LEVEL) and drop it from finishLevel.
+ */
+const EXIT_PATHS_LEVEL: LevelNumber = 3;
+/** Completion beat before the next level starts; the level-box pulse (900ms) must finish inside it. */
+const LEVEL_DONE_MS = 1500;
+/** Longer beat when the exit paths are revealed, so they can be seen. */
+const EXIT_PATHS_DONE_MS = 3500;
 const STORM_KEY = "electric-grid-last-storm";
 
 let memoryStorm = -1;
@@ -103,6 +113,7 @@ export default function ElectricGridGame({
     map.current?.reset();
     map.current?.level.reset();
     map.current?.instruction.reset();
+    map.current?.message.reset();
     setCard(false);
     setAssist("");
     go("begin");
@@ -134,8 +145,12 @@ export default function ElectricGridGame({
     setLevel(n);
     clearFeedback();
     go("watch");
+    map.current?.hideExitPaths(true);
     map.current?.level.completeLevels(info.slots);
+    map.current?.level.setProgress(info.slots.length / 7);
+    map.current?.message.setMessage(info.message);
     map.current?.instruction.showInstruction(info.instruction);
+    map.current?.instruction.showReplay();
     map.current?.hideFacilities(true); // only this level's icons stay on the map
     map.current?.setFacilities(ids, "ok", true);
     if (!(await wait(1600, token))) return;
@@ -146,6 +161,9 @@ export default function ElectricGridGame({
   const outro = async (token: number) => {
     go("outro");
     map.current?.instruction.hideInstruction();
+    map.current?.instruction.hideReplay();
+    map.current?.message.hideMessage();
+    map.current?.hideExitPaths(true);
     if (!(await wait(800, token))) return;
     map.current?.hideZones(true);
     map.current?.hideFacilities(true);
@@ -157,8 +175,12 @@ export default function ElectricGridGame({
     const token = run.current;
     go("levelDone");
     cheer();
-    if (!(await wait(1500, token))) return;
     const n = live.current.level;
+    map.current?.instruction.hideReplay();
+    map.current?.level.pulse(LEVEL_INFO[n].slots);
+    const revealPaths = n === EXIT_PATHS_LEVEL;
+    if (revealPaths) map.current?.showExitPaths(true);
+    if (!(await wait(revealPaths ? EXIT_PATHS_DONE_MS : LEVEL_DONE_MS, token))) return;
     if (n < 6) await startLevel((n + 1) as LevelNumber, token);
     else await outro(token);
   };
@@ -172,6 +194,7 @@ export default function ElectricGridGame({
     map.current?.reset();
     map.current?.level.reset();
     map.current?.instruction.reset();
+    map.current?.message.reset();
     go("intro");
     setCard(true);
     if (!(await wait(3600, token))) return;
@@ -340,9 +363,10 @@ export default function ElectricGridGame({
       className="relative flex min-h-screen select-none items-center justify-center bg-black"
       onPointerDown={() => unlockAudio()}
     >
-      <div className="relative" style={{ width: "min(100vw, calc(100vh * 2927 / 1646))" }}>
+      <div className="relative" style={{ width: "min(100vw, calc(100vh * 2932 / 1648))" }}>
         <ElectricGridMap
           ref={map}
+          onReplay={replay}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerEnd}
@@ -354,15 +378,6 @@ export default function ElectricGridGame({
           <p className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-slate-950/80 px-6 py-3 text-2xl text-amber-200">
             {COPY.watching}
           </p>
-        )}
-
-        {(phase === "play" || phase === "watch") && (
-          <>
-            {/* Just right of the instruction panel (which ends at ~88.9% of the map width). */}
-            <div className="absolute bottom-4 right-2 flex justify-center" style={{ left: "89.6%" }}>
-              <PlayButton onClick={replay} disabled={phase !== "play"} label={COPY.replay} />
-            </div>
-          </>
         )}
 
         {phase === "begin" && (
@@ -410,21 +425,4 @@ export default function ElectricGridGame({
 
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-950/80 p-10 text-center text-white">{children}</div>;
-}
-
-/** Round play button that replays the outage order. */
-function PlayButton({ onClick, disabled, label }: { onClick: () => void; disabled?: boolean; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="flex size-16 items-center justify-center rounded-full bg-slate-800/90 text-white hover:bg-slate-700 disabled:opacity-40"
-    >
-      <svg viewBox="0 0 24 24" className="size-8" fill="currentColor" aria-hidden="true">
-        <path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11-6.86a1 1 0 0 0 0-1.7l-11-6.86A1 1 0 0 0 8 5.14z" />
-      </svg>
-    </button>
-  );
 }

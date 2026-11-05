@@ -32,20 +32,43 @@ const groups: [title: string, actions: Action[]][] = [
     ],
   ],
   [
+    "Exit paths",
+    [
+      ["showExitPaths (fade)", (m) => m.showExitPaths(true)],
+      ["showExitPaths instant", (m) => m.showExitPaths()],
+      ["hideExitPaths (fade)", (m) => m.hideExitPaths(true)],
+      ["hideExitPaths instant", (m) => m.hideExitPaths()],
+    ],
+  ],
+  [
     "Level",
     [
       ["complete power, water", (m) => m.level.completeLevels(["power", "water"])],
       ["complete #4", (m) => m.level.completeLevels(4)],
       ["incomplete water", (m) => m.level.incompleteLevels("water")],
+      ["setProgress 0", (m) => m.level.setProgress(0, true)],
+      ["setProgress 2/7", (m) => m.level.setProgress(2 / 7, true)],
+      ["setProgress 1", (m) => m.level.setProgress(1, true)],
+      ["pulse water", (m) => m.level.pulse("water")],
+      ["pulse slots 1 & 2", (m) => m.level.pulse([1, 2])],
       ["reset", (m) => m.level.reset()],
+    ],
+  ],
+  [
+    "Message",
+    [
+      ["setMessage (two lines)", (m) => m.message.setMessage("level two... restoration of\nwater to the region")],
+      ["hideMessage", (m) => m.message.hideMessage()],
+      ["reset", (m) => m.message.reset()],
     ],
   ],
   [
     "Instruction",
     [
-      ["touch-power", (m) => m.instruction.showInstruction("touch-power")],
-      ["connect-power", (m) => m.instruction.showInstruction("connect-power")],
-      ["circle-water", (m) => m.instruction.showInstruction("circle-water")],
+      ...([1, 2, 3, 4, 5, 6] as const).map((n): Action => [`showInstruction level-${n}`, (m) => m.instruction.showInstruction(`level-${n}`)]),
+      ["showInstruction 1 (number)", (m) => m.instruction.showInstruction(1)],
+      ["showReplay", (m) => m.instruction.showReplay()],
+      ["hideReplay", (m) => m.instruction.hideReplay()],
       ["hide", (m) => m.instruction.hideInstruction()],
       ["reset", (m) => m.instruction.reset()],
     ],
@@ -80,7 +103,7 @@ export default function ElectricGridTest() {
         setMenu({ x: Math.min(e.clientX, window.innerWidth - MENU_WIDTH), y: e.clientY });
       }}
     >
-      <ElectricGridMap ref={map} />
+      <ElectricGridMap ref={map} onReplay={() => console.log("replay clicked")} />
       {menu && (
         <div
           style={{
