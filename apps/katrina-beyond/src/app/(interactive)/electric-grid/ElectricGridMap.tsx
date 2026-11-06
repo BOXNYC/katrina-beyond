@@ -22,9 +22,10 @@ export type ElectricGridMapHandle = {
   /**
    * Fades the given zones out one after another, `delay` ms apart, from the map center outward. Zones are grouped
    * into rings by distance from the center (ZONE_RING units wide); within a ring they go counter-clockwise (as seen
-   * on screen) starting from due east.
+   * on screen) starting from due east. `onZone` fires as each zone starts to switch (for a matching sound). The zone
+   * tint fades in at OUTRO_ZONE_OPACITY instead of the usual group opacity, so it is clearly visible.
    */
-  hideZonesOutward: (zones: (number | string)[], delay?: number) => void;
+  hideZonesOutward: (zones: (number | string)[], delay?: number, onZone?: (index: number, total: number) => void) => void;
   /** Shows only the given icon types (hides all others first). */
   showIcons: (names: IconName | IconName[]) => void;
   /** Hides all icons. */
@@ -96,6 +97,9 @@ const RING_R = 44;
 const MAP_CENTER = { x: 2932 / 2, y: 1648 / 2 };
 /** Width (map units) of the distance bands hideZonesOutward sweeps through. */
 const ZONE_RING = 400;
+/** Normal opacity of the zones group (the tint is faint on purpose), and the stronger one used while the outro fades zones back in. */
+const ZONE_OPACITY = 0.141;
+const OUTRO_ZONE_OPACITY = 0.3;
 /** A flow starts/ends on a water icon if its endpoint is within this many map units of it. */
 const FLOW_SNAP = 60;
 /** Delay between flows fading in when only some are shown. */
@@ -145,6 +149,7 @@ export default function ElectricGridMap({
 
   const hideZones = (transition = false) => {
     clearTimers();
+    svg.current?.querySelector<SVGElement>(".zones")?.style.removeProperty("opacity");
     svg.current?.querySelectorAll<SVGElement>(".zones [data-name]").forEach((el) => {
       el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
       el.style.removeProperty("opacity");
@@ -257,8 +262,18 @@ export default function ElectricGridMap({
       el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
       el.style.opacity = "1";
     },
-    hideZonesOutward(zones, delay = 250) {
+    hideZonesOutward(zones, delay = 250, onZone) {
       clearTimers();
+      // Raise the group opacity for the fade-in, and hold every zone not in this run at its old look so only these change.
+      const group = svg.current?.querySelector<SVGElement>(".zones");
+      if (group) {
+        group.style.transition = "none";
+        group.style.opacity = String(OUTRO_ZONE_OPACITY);
+        const mine = new Set(zones.map((z) => zoneEl(z)));
+        group.querySelectorAll<SVGElement>("[data-name]").forEach((el) => {
+          if (!mine.has(el) && !el.style.opacity) el.style.opacity = String(ZONE_OPACITY / OUTRO_ZONE_OPACITY);
+        });
+      }
       const polar = zones.flatMap((zone) => {
         const el = zoneEl(zone);
         if (!el) return [];
@@ -274,6 +289,7 @@ export default function ElectricGridMap({
           window.setTimeout(() => {
             el.style.transition = `opacity ${FADE_MS}ms ease`;
             el.style.removeProperty("opacity");
+            onZone?.(i, polar.length);
           }, i * delay),
         );
       });

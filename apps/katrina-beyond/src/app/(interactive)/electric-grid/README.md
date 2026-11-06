@@ -89,11 +89,19 @@ Each facility type is used by one level (Level 6 uses two).
 
 The level indicator is cumulative: it reveals one more level each time the player advances. Its progress bar fills to (lit levels / 7), and a short message (`LEVEL_INFO[n].message`, placeholder copy in `src/lib/electricGridStorms.ts`) is shown under it. The message is typed out character by character with a cursor that disappears when typing finishes (instant with `prefers-reduced-motion`). Every level completion has a payoff: the lit level icons pulse and every restored facility icon throbs (scales up and down), each with its own duration and delay derived from its id so the timing is uneven but stable. Completing level 3 (water) also reveals the water exit paths (`EXIT_PATHS_LEVEL` in `ElectricGridGame.tsx`), hidden again when level 4 starts. Only the flows whose water icons are all visible on the map are shown (a flow that would start at a hidden icon is skipped), fading in one after another. The instruction panel has an in-panel replay button (shown during watch/play) that replays the outage order.
 
+**Level intro (linear, each step starts when the previous finishes):**
+1. The level description (`LEVEL_INFO[n].message`) types out under a **spotlight** (the rest of the screen dims, the panel gets an amber outline).
+2. The spotlight moves to the instruction panel, which fades in and has its caption "typed" (revealed left to right in steps). The instruction is hidden during the previous level's payoff so it appears fresh here.
+3. The spotlight lifts, the level's icons appear and the outage sequence plays ("Watching..."), then play begins.
+Input is blocked during all three steps (phase `briefing`, then `watch`). All timers are tied to the run token, so reset/level change/unmount cancels them. With `prefers-reduced-motion` text and captions appear at once and the spotlight does not animate. The spotlight is a simple overlay in `ElectricGridGame.tsx` (`SPOTLIGHTS` holds the two target boxes as % of the map).
+
+**Payoff sounds** (synthesized with WebAudio in `src/lib/electricGridSound.ts`, no audio files; all respect `setMuted`): every level completion (including level 6) plays `levelJingle` (~3 s melodic phrase with bass and a closing chord); the outro's final reveal plays `finalJingle` (~6 s two-part fanfare ending on a held chord with sparkle).
+
 **Icons per level:** when a new level begins, only that level's facility icons are shown. Icons from previous levels are hidden (along with any hint, selection and pulse rings) before the new level's icons fade in. Restored/outage states do not carry over between levels.
 
 ### 4.3 Outro
 1. When the game completes, **all icons hide**.
-2. **All active zones turn off** one at a time, from the map center outward and counter-clockwise: zones are grouped into 400-unit distance bands from the map center, and within a band go counter-clockwise (on screen) starting from due east (`hideZonesOutward`).
+2. **All active zones turn off** one at a time, from the map center outward and counter-clockwise: zones are grouped into 400-unit distance bands from the map center, and within a band go counter-clockwise (on screen) starting from due east (`hideZonesOutward`). Each zone switching off plays a short falling whoosh-tick (`zoneTick`, pitch sweeping down across the run) in sync with the 300ms stagger. The zone tint fades back in at a stronger opacity than the normal faint one (`OUTRO_ZONE_OPACITY` 0.3 vs 0.141 in `ElectricGridMap.tsx`, with the other zones held at their old look) so it is clearly visible.
 3. **Every icon returns, with the water flow directions**, all icons throbbing with staggered timing.
 4. A completion message is shown.
 5. A button appears to exit; pressing it **restarts the experience** at the **"Begin"** button.

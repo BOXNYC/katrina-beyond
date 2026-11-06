@@ -1,12 +1,13 @@
 "use client";
 
+import { typeTick } from "@/lib/electricGridSound";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type SVGProps } from "react";
 
 export type LevelMessageHandle = {
   /** Hides the message without transition. */
   reset: () => void;
-  /** Shows the message ("\n" breaks a line), crossfading from the one already showing, then types it out with a cursor that goes away when done. */
-  setMessage: (text: string, transition?: boolean) => void;
+  /** Shows the message ("\n" breaks a line), crossfading from the one already showing, then types it out with a cursor that goes away when done. The promise resolves when typing has finished (or was cut short by a reset, hide or newer message). */
+  setMessage: (text: string, transition?: boolean) => Promise<void>;
   /** Hides the message. */
   hideMessage: (transition?: boolean) => void;
 };
@@ -41,6 +42,7 @@ export default function LevelMessage({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const visible = useRef(false);
   const typer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const typedDone = useRef<(() => void) | null>(null);
   const [message, setText] = useState(DEFAULT_MESSAGE);
   const [typed, setTyped] = useState(DEFAULT_MESSAGE.length); // characters of `message` showing; the cursor shows while short of the end
 
@@ -48,11 +50,19 @@ export default function LevelMessage({
     () => () => {
       clearTimeout(timer.current);
       clearInterval(typer.current);
+      typedDone.current?.();
+      typedDone.current = null;
     },
     [],
   );
 
   /** Swaps in `next` and types it out one character at a time (all at once with reduced motion). */
+  const settle = () => {
+    const done = typedDone.current;
+    typedDone.current = null;
+    done?.();
+  };
+
   const typeIn = (next: string) => {
     clearInterval(typer.current);
     setText(next);
@@ -62,7 +72,11 @@ export default function LevelMessage({
     typer.current = setInterval(() => {
       n += 1;
       setTyped(n);
-      if (n >= next.length) clearInterval(typer.current);
+      if (next[n - 1]?.trim()) typeTick();
+      if (n >= next.length) {
+        clearInterval(typer.current);
+        settle();
+      }
     }, TYPE_MS);
   };
 
@@ -70,6 +84,7 @@ export default function LevelMessage({
   const finishTyping = () => {
     clearInterval(typer.current);
     setTyped(message.length);
+    settle();
   };
 
   const fade = (on: boolean, transition: boolean) => {
@@ -93,16 +108,21 @@ export default function LevelMessage({
     },
     setMessage(next, transition = true) {
       clearTimeout(timer.current);
+      settle(); // a newer message supersedes any still typing
+      const done = new Promise<void>((resolve) => {
+        typedDone.current = resolve;
+      });
       if (!transition || !visible.current) {
         typeIn(next);
         fade(true, transition);
-        return;
+        return done;
       }
       fade(false, true);
       timer.current = setTimeout(() => {
         typeIn(next);
         fade(true, true);
       }, FADE_MS);
+      return done;
     },
   }));
 

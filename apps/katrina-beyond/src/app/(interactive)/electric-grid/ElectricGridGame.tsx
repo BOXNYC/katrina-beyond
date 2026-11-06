@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FACILITIES, FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, cheer, playStorm, preloadStorm, stopStorm, tone, unlockAudio } from "@/lib/electricGridSound";
+import { buzz, finalJingle, levelJingle, playStorm, preloadStorm, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
@@ -19,7 +19,7 @@ import { useIdlePrompt } from "../useIdlePrompt";
 import StormPicker from "./StormPicker";
 import ElectricGridMap, { type ElectricGridMapHandle, type MapPoint } from "./ElectricGridMap";
 
-type Phase = "begin" | "choose" | "intro" | "watch" | "play" | "levelDone" | "outro";
+type Phase = "begin" | "choose" | "intro" | "briefing" | "watch" | "play" | "levelDone" | "outro";
 
 /** How close (map units) a touch must land to a facility to count as on it. */
 const HIT_RADIUS = 64;
@@ -42,7 +42,18 @@ const EXIT_PATHS_DONE_MS = 4500;
 /** Outro: pause with every icon hidden, gap between zones switching off, and how long the final reveal plays before the card. */
 const OUTRO_HIDDEN_MS = 1000;
 const OUTRO_ZONE_MS = 300;
-const OUTRO_REVEAL_MS = 4000;
+const OUTRO_REVEAL_MS = 6000; // the final jingle (~6 s) plays over it
+
+/** Level intro beats: spotlight fade, and pauses after each typed panel so it can be read. */
+const SPOT_FADE_MS = 500;
+const READ_PAUSE_MS = 700;
+
+/** Spotlight targets: a circle centered on the level message / instruction panel (cx, cy in % of the map), diameter in % of the map width. Much larger than the target so the text never clips. */
+const SPOTLIGHTS = {
+  message: { cx: 13.2, cy: 18.2, d: 56 },
+  instruction: { cx: 87.9, cy: 78, d: 50 },
+} as const;
+type Spot = keyof typeof SPOTLIGHTS;
 
 type Gesture =
   | { kind: "connect"; pointerId: number; chain: string[] }
@@ -72,6 +83,9 @@ export default function ElectricGridGame({
   const [phase, setPhase] = useState<Phase>("begin");
   const [storm, setStorm] = useState<Storm>(STORMS[0]);
   const [card, setCard] = useState(false);
+  // Spotlight: the box keeps its last target while it fades out (`on` false).
+  const [spotState, setSpotState] = useState<{ target: Spot; on: boolean }>({ target: "message", on: false });
+  const setSpot = (target: Spot | null) => setSpotState((p) => ({ target: target ?? p.target, on: target !== null }));
 
   useEffect(() => {
     const token = run;
@@ -102,6 +116,7 @@ export default function ElectricGridGame({
     map.current?.level.reset();
     map.current?.instruction.reset();
     map.current?.message.reset();
+    setSpot(null);
     setCard(false);
     go("begin");
   };
@@ -130,14 +145,28 @@ export default function ElectricGridGame({
     const ids = visibleFacilityIds(l.storm, n);
     l.candidates = ids.map((id) => FACILITY_BY_ID[id]);
     clearFeedback();
-    go("watch");
+    go("briefing");
     map.current?.hideExitPaths(true);
     map.current?.level.completeLevels(info.slots);
     map.current?.level.setProgress(info.slots.length / 7);
-    map.current?.message.setMessage(info.message);
-    map.current?.instruction.showInstruction(info.instruction);
+    map.current?.instruction.hideInstruction(false); // shown fresh at step 2
+    map.current?.instruction.hideReplay(false);
+    map.current?.hideFacilities(true); // only this level's icons stay on the map, and not until step 3
+    // 1. The level description types out under a spotlight.
+    setSpot("message");
+    if (!(await wait(SPOT_FADE_MS, token))) return;
+    await map.current?.message.setMessage(info.message);
+    if (!(await wait(READ_PAUSE_MS, token))) return;
+    // 2. The spotlight moves to the instructions, which appear and type out.
+    setSpot("instruction");
+    if (!(await wait(SPOT_FADE_MS, token))) return;
+    await map.current?.instruction.showInstruction(info.instruction);
+    if (!(await wait(READ_PAUSE_MS, token))) return;
+    // 3. The spotlight lifts and the icon sequence plays.
+    setSpot(null);
+    if (!(await wait(SPOT_FADE_MS, token))) return;
+    go("watch");
     map.current?.instruction.showReplay();
-    map.current?.hideFacilities(true); // only this level's icons stay on the map
     map.current?.setFacilities(ids, "ok", true);
     if (!(await wait(1600, token))) return;
     if (!(await playOutages(n, token, true))) return;
@@ -153,12 +182,13 @@ export default function ElectricGridGame({
     map.current?.hideFacilities(true); // 1. every icon off
     if (!(await wait(OUTRO_HIDDEN_MS, token))) return;
     const zones = stormZones(live.current.storm);
-    map.current?.hideZonesOutward(zones, OUTRO_ZONE_MS); // 2. zones off, center out, counter-clockwise
+    map.current?.hideZonesOutward(zones, OUTRO_ZONE_MS, zoneTick); // 2. zones off, center out, counter-clockwise
     if (!(await wait(zones.length * OUTRO_ZONE_MS + 1000, token))) return;
     const all = FACILITIES.map((f) => f.id); // 3. every icon back, with the water flows, all throbbing
     map.current?.setFacilities(all, "ok", true);
     map.current?.showExitPaths(true);
-    map.current?.throb(all, 3);
+    map.current?.throb(all, 4);
+    finalJingle();
     if (!(await wait(OUTRO_REVEAL_MS, token))) return;
     setCard(true);
   };
@@ -166,9 +196,9 @@ export default function ElectricGridGame({
   const finishLevel = async () => {
     const token = run.current;
     go("levelDone");
-    cheer();
     const n = live.current.level;
-    map.current?.instruction.hideMessage();
+    levelJingle();
+    map.current?.instruction.hideInstruction(); // hidden for the payoff; the next level shows it fresh
     map.current?.instruction.hideReplay();
     map.current?.level.pulse(LEVEL_INFO[n].slots);
     // Payoff: every restored icon throbs; the water level also shows the flows between its (visible) icons.
@@ -196,6 +226,7 @@ export default function ElectricGridGame({
     map.current?.level.reset();
     map.current?.instruction.reset();
     map.current?.message.reset();
+    setSpot(null);
     go("intro");
     setCard(true);
     playStorm();
@@ -370,6 +401,19 @@ export default function ElectricGridGame({
             {COPY.watching}
           </p>
         )}
+
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-[opacity,left,top,width] duration-500 motion-reduce:transition-none"
+          style={{
+            left: `${SPOTLIGHTS[spotState.target].cx}%`,
+            top: `${SPOTLIGHTS[spotState.target].cy}%`,
+            width: `${SPOTLIGHTS[spotState.target].d}%`,
+            aspectRatio: "1",
+            opacity: spotState.on ? 1 : 0,
+            boxShadow: "0 0 0 100vmax rgba(2,6,23,0.65)",
+          }}
+        />
 
         {phase === "begin" && (
           <button onClick={begin} className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/55 text-center text-white">

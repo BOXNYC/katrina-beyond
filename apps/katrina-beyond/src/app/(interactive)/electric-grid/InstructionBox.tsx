@@ -1,5 +1,6 @@
 "use client";
 
+import { typeTick } from "@/lib/electricGridSound";
 import { useEffect, useImperativeHandle, useRef, type KeyboardEvent, type Ref, type SVGProps } from "react";
 
 export type InstructionName = "level-1" | "level-2" | "level-3" | "level-4" | "level-5" | "level-6";
@@ -25,8 +26,12 @@ const LEGACY: Record<LegacyInstructionName, number> = {
 export type InstructionBoxHandle = {
   /** Hides the panel and the replay button without transition. */
   reset: () => void;
-  /** Shows the panel for the given level (name, legacy name or 1-6), replacing any instruction already showing. */
-  showInstruction: (name: InstructionName | LegacyInstructionName | number, transition?: boolean) => void;
+  /**
+   * Shows the panel for the given level (name, legacy name or 1-6), replacing any instruction already showing. The
+   * panel fades in, then its caption is "typed" (revealed left to right in steps). The promise resolves once that
+   * has finished: at once without a transition or with reduced motion, and also if the panel is hidden or reset meanwhile.
+   */
+  showInstruction: (name: InstructionName | LegacyInstructionName | number, transition?: boolean) => Promise<void>;
   /** Hides the panel and its instruction (not the replay button). */
   hideInstruction: (transition?: boolean) => void;
   /** Shows the replay button. */
@@ -47,6 +52,9 @@ export type InstructionBoxHandle = {
 const FADE_MS = 500;
 /** How long a message stays, once it has finished typing, before the instruction returns on its own. */
 export const MESSAGE_MS = 6000;
+/** How long the caption takes to type out when an instruction is shown, and in how many steps. */
+const CAPTION_MS = 1400;
+const CAPTION_STEPS = 24;
 /** Delay between typed characters of a message. */
 const TYPE_MS = 35;
 /** Message text layout, in svg units: clear of the replay button (top-right), padded from the box edges. */
@@ -93,11 +101,30 @@ export default function InstructionBox({
   const messageUp = useRef(false);
   const messageTimer = useRef<number | undefined>(undefined);
   const typeTimer = useRef<number | undefined>(undefined);
+  const captionTimer = useRef<number | undefined>(undefined);
+  const captionAnim = useRef<Animation | null>(null);
+  const captionDone = useRef<(() => void) | null>(null);
+  const captionEl = useRef<SVGElement | null>(null);
+  const captionTick = useRef<number | undefined>(undefined);
+
+  /** Stops any caption typing in progress (leaving the caption fully shown) and resolves its promise. */
+  const endCaption = () => {
+    window.clearTimeout(captionTimer.current);
+    window.clearInterval(captionTick.current);
+    captionAnim.current?.cancel();
+    captionAnim.current = null;
+    captionEl.current?.style.removeProperty("clip-path");
+    captionEl.current = null;
+    const done = captionDone.current;
+    captionDone.current = null;
+    done?.();
+  };
 
   useEffect(
     () => () => {
       window.clearTimeout(messageTimer.current);
       window.clearTimeout(typeTimer.current);
+      endCaption();
     },
     [],
   );
@@ -215,6 +242,7 @@ export default function InstructionBox({
       ci += 1;
       line.span.textContent = line.text.slice(0, ci);
       place(line);
+      if (line.text[ci - 1]?.trim()) typeTick();
       if (ci >= line.text.length) {
         li += 1;
         ci = 0;
@@ -233,6 +261,7 @@ export default function InstructionBox({
   };
 
   const hide = (transition: boolean) => {
+    endCaption();
     dropMessage(transition);
     shown.current = null;
     panels().forEach((el) => fade(el, false, transition));
@@ -251,13 +280,34 @@ export default function InstructionBox({
     showInstruction(name, transition = true) {
       const level = typeof name === "number" ? name : name in LEGACY ? LEGACY[name as LegacyInstructionName] : Number(name.slice(-1));
       const panel = svg.current?.querySelector(`:scope > g[data-panel="${level}"]`);
-      if (!panel) return;
+      if (!panel) return Promise.resolve();
+      endCaption();
       dropMessage(transition);
       shown.current = level;
       panels().forEach((el) => el !== panel && fade(el, false, transition));
       const b = bed();
       if (b) fade(b, true, transition);
       fade(panel, true, transition);
+      const caption = panel.querySelector<SVGElement>("[data-caption]");
+      if (!transition || !caption || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        captionDone.current = resolve;
+        captionEl.current = caption;
+        // Hidden until the panel has faded in, then wiped in left to right in steps.
+        caption.style.clipPath = "inset(0 100% 0 0)";
+        captionTimer.current = window.setTimeout(() => {
+          const anim = caption.animate([{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }], {
+            duration: CAPTION_MS,
+            easing: `steps(${CAPTION_STEPS}, end)`,
+            fill: "forwards",
+          });
+          captionAnim.current = anim;
+          captionTick.current = window.setInterval(typeTick, CAPTION_MS / CAPTION_STEPS); // one click per wipe step
+          anim.onfinish = () => {
+            endCaption();
+          };
+        }, FADE_MS);
+      });
     },
     showReplay: (transition = true) => setReplay(true, transition),
     hideReplay: (transition = true) => setReplay(false, transition),
@@ -297,7 +347,7 @@ export default function InstructionBox({
       >
         <rect className="ai-box-container" x={2299} y={985} width={552} height={600} rx={30} fill="#000" fillOpacity={0.741} data-name="Container" />
         <g className="level-6" data-panel={6}>
-          <image href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2401} y={1446} width={359} height={92} data-name="touch the icons in proper order" />
+          <image data-caption href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2401} y={1446} width={359} height={92} data-name="touch the icons in proper order" />
           <image href="/electric-grid/ui/firehouse-original-art-copy.png" x={2545} y={1056} width={64} height={80} data-name="firehouse original art copy" />
           <image href="/electric-grid/ui/firehouse-original-art-copy-2.png" x={2377} y={1161} width={64} height={80} data-name="firehouse original art copy 2" />
           <image href="/electric-grid/ui/firehouse-original-art-copy-3.png" x={2563} y={1236} width={64} height={80} data-name="firehouse original art copy 3" />
@@ -306,7 +356,7 @@ export default function InstructionBox({
           <image href="/electric-grid/ui/hand.png" x={2599} y={1261} width={171} height={150} data-name="hand" />
         </g>
         <g className="level-5" data-panel={5}>
-          <image href="/electric-grid/ui/circle-the-icon-groups-in-proper-order.png" x={2356} y={1449} width={440} height={92} data-name="circle the icon groups in proper order" />
+          <image data-caption href="/electric-grid/ui/circle-the-icon-groups-in-proper-order.png" x={2356} y={1449} width={440} height={92} data-name="circle the icon groups in proper order" />
           <image href="/electric-grid/ui/shape-1.png" x={2370} y={1015} width={349} height={308} data-name="Shape 1" />
           <image href="/electric-grid/ui/shelter-1-copy.png" x={2470} y={1093} width={65} height={81} data-name="shelter 1 copy" />
           <image href="/electric-grid/ui/shelter-1-copy.png" x={2503} y={1198} width={65} height={81} data-name="shelter 1 copy 2" />
@@ -314,14 +364,14 @@ export default function InstructionBox({
           <image href="/electric-grid/ui/hand-2.png" x={2602} y={1273} width={155} height={136} data-name="hand" />
         </g>
         <g className="level-4" data-panel={4}>
-          <image href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2397} y={1432} width={359} height={92} data-name="touch the icons in proper order" />
+          <image data-caption href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2397} y={1432} width={359} height={92} data-name="touch the icons in proper order" />
           <image href="/electric-grid/ui/hospital-original-art-copy.png" x={2389} y={1055} width={71} height={70} data-name="hospital original art copy" />
           <image href="/electric-grid/ui/hospital-original-art-copy-2.png" x={2481} y={1137} width={71} height={70} data-name="hospital original art copy 2" />
           <image href="/electric-grid/ui/hospital-original-art-copy-3.png" x={2571} y={1223} width={71} height={70} data-name="hospital original art copy 3" />
           <image href="/electric-grid/ui/hand-3.png" x={2599} y={1257} width={155} height={136} data-name="hand" />
         </g>
         <g className="level-3" data-panel={3}>
-          <image href="/electric-grid/ui/circle-icon-groups-to-restore-water-supply.png" x={2343} y={1431} width={471} height={92} data-name="circle icon groups to restore water supply" />
+          <image data-caption href="/electric-grid/ui/circle-icon-groups-to-restore-water-supply.png" x={2343} y={1431} width={471} height={92} data-name="circle icon groups to restore water supply" />
           <image href="/electric-grid/ui/shape-1-2.png" x={2355} y={1028} width={369} height={318} data-name="Shape 1" />
           <image href="/electric-grid/ui/water-original-art-copy.png" x={2483} y={1217} width={76} height={76} data-name="water original art copy" />
           <image href="/electric-grid/ui/water-original-art-copy-2.png" x={2568} y={1148} width={76} height={76} data-name="water original art copy 2" />
@@ -334,10 +384,10 @@ export default function InstructionBox({
           <image href="/electric-grid/ui/power-original-art-copy.png" x={2374} y={1126} width={77} height={77} data-name="power original art copy" />
           <image href="/electric-grid/ui/power-original-art-copy-2.png" x={2535} y={1066} width={77} height={77} data-name="power original art copy 2" />
           <image href="/electric-grid/ui/power-original-art-copy-3.png" x={2662} y={1166} width={77} height={77} data-name="power original art copy 3" />
-          <image href="/electric-grid/ui/connect-the-icons.png" x={2393} y={1472} width={361} height={31} data-name="connect the icons" />
+          <image data-caption href="/electric-grid/ui/connect-the-icons.png" x={2393} y={1472} width={361} height={31} data-name="connect the icons" />
         </g>
         <g className="level-1" data-panel={1}>
-          <image href="/electric-grid/ui/touch-the-icons-in-proper-order-2.png" x={2401} y={1432} width={360} height={92} data-name="touch the icons in proper order" />
+          <image data-caption href="/electric-grid/ui/touch-the-icons-in-proper-order-2.png" x={2401} y={1432} width={360} height={92} data-name="touch the icons in proper order" />
           <image href="/electric-grid/ui/power-original-art-copy-4.png" x={2575} y={1220} width={77} height={77} data-name="power original art copy 4" />
           <image href="/electric-grid/ui/power-original-art-copy-5.png" x={2386} y={1065} width={77} height={77} data-name="power original art copy 5" />
           <image href="/electric-grid/ui/power-original-art-copy-6.png" x={2496} y={1132} width={77} height={77} data-name="power original art copy 6" />
