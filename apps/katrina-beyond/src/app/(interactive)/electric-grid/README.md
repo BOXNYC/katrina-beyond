@@ -91,7 +91,7 @@ The level indicator is cumulative: it reveals one more level each time the playe
 
 **Level intro (linear, each step starts when the previous finishes):**
 1. The level description (`LEVEL_INFO[n].message`) types out under a **spotlight** (the rest of the screen dims, the panel gets an amber outline).
-2. The spotlight moves to the instruction panel, which fades in and has its caption "typed" (revealed left to right in steps). The instruction is hidden during the previous level's payoff so it appears fresh here.
+2. The spotlight moves to the instruction panel, which fades in and has its caption "typed" (revealed left to right in steps). While shown, its art demonstrates the gesture on a loop (`startDemo` in `InstructionBox.tsx`): starting as the caption begins typing and repeating after a ~3 s hold on the design, the icons dim and the hand taps them in order (levels 1, 4, 6), drags the dotted line through them (level 2) or circles them, drawing the dashed loop (levels 3, 5), lighting each icon as it is reached, then ends back on the design. Off with `prefers-reduced-motion`. The instruction is hidden during the previous level's payoff so it appears fresh here.
 3. The spotlight lifts, the level's icons appear and the outage sequence plays ("Watching..."), then play begins.
 Input is blocked during all three steps (phase `briefing`, then `watch`). All timers are tied to the run token, so reset/level change/unmount cancels them. With `prefers-reduced-motion` text and captions appear at once and the spotlight does not animate. The spotlight is a simple overlay in `ElectricGridGame.tsx` (`SPOTLIGHTS` holds the two target boxes as % of the map).
 

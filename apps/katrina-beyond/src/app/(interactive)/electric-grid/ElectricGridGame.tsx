@@ -385,7 +385,7 @@ export default function ElectricGridGame({
       className="relative flex min-h-screen select-none items-center justify-center bg-black"
       onPointerDown={() => unlockAudio()}
     >
-      <div className="relative" style={{ width: "min(100vw, calc(100vh * 2932 / 1648))" }}>
+      <div className="relative overflow-hidden" style={{ width: "min(100vw,calc(100vh * 2932 / 1648))" }}>
         <ElectricGridMap
           ref={map}
           onReplay={replay}
