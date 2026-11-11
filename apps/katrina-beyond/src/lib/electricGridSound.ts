@@ -200,5 +200,11 @@ export function zoneTick(index = 0, total = 1) {
   osc.stop(t + 0.25);
 }
 
+/** Soft rising pop for one icon growing on in the final reveal; pitch climbs as `index` approaches `total`, so the run swells up. */
+export function popTick(index = 0, total = 1) {
+  const k = total > 1 ? index / (total - 1) : 0;
+  tone(420 + k * 900, 110, "sine");
+}
+
 export const buzz =() => tone(110, 350, "sawtooth");
 export const cheer = () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 180), i * 120));

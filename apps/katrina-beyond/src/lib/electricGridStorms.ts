@@ -2,7 +2,7 @@ import { FACILITY_BY_ID, FACILITIES, type FacilityType } from "./electricGridFac
 
 /** One outage step: a single facility (tap / connect) or a group of 2-4 (circle). */
 export type OutageStep = { facilityIds: string[] };
-export type LevelNumber = 1 | 2 | 3 | 4 | 5 | 6;
+export type LevelNumber = 1 | 2 | 3 | 4 | 5;
 export type Interaction = "tap" | "connect" | "circle";
 
 export type Storm = {
@@ -15,7 +15,7 @@ export type Storm = {
 export type LevelInfo = {
   interaction: Interaction;
   types: FacilityType[];
-  instruction: "level-1" | "level-2" | "level-3" | "level-4" | "level-5" | "level-6";
+  instruction: "level-1" | "level-2" | "level-3" | "level-4" | "level-5";
   /** Text shown under the level box. PLACEHOLDER copy; "\n" is a line break (2 lines max). */
   message: string;
   /** Level-indicator slots (1-based) lit once this level starts. */
@@ -49,38 +49,30 @@ export const LEVEL_INFO: Record<LevelNumber, LevelInfo> = {
     title: "Water facilities",
   },
   4: {
-    interaction: "tap",
-    types: ["hospital"],
+    interaction: "circle",
+    types: ["hospital", "shelter"],
     instruction: "level-4",
-    message: "level four... restoration of\npower to the hospitals",
-    slots: [1, 2, 3, 4],
-    title: "Hospitals",
+    message: "level four... restoration of\npower to hospitals and shelters",
+    slots: [1, 2, 3, 4, 5],
+    title: "Hospitals and shelters",
   },
   5: {
-    interaction: "circle",
-    types: ["shelter"],
-    instruction: "level-5",
-    message: "level five... restoration of\npower to the shelters",
-    slots: [1, 2, 3, 4, 5],
-    title: "Shelters",
-  },
-  6: {
     interaction: "tap",
     types: ["police", "fire"],
-    instruction: "level-6",
-    message: "level six... restoration of\npolice and fire stations",
+    instruction: "level-5",
+    message: "level five... restoration of\npolice and fire stations",
     slots: [1, 2, 3, 4, 5, 6, 7],
     title: "Police and fire stations",
   },
 };
 
-export const LEVEL_NUMBERS: LevelNumber[] = [1, 2, 3, 4, 5, 6];
+export const LEVEL_NUMBERS: LevelNumber[] = [1, 2, 3, 4, 5];
 
 const s = (...ids: string[]): OutageStep => ({ facilityIds: ids });
 
 /**
  * TEMPORARY content: names, severities and outage picks are placeholders until the team supplies the real ones.
- * Facility ids come from electricGridFacilities.ts. Circle levels use groups of 2-4 that are spatially clustered.
+ * Facility ids come from electricGridFacilities.ts. Circle levels use groups of 2-4 that are spatially clustered (level 4 mixes a hospital with a shelter in each group).
  * Run the checks in `validateStorms()` after editing.
  */
 export const STORMS: Storm[] = [
@@ -92,9 +84,8 @@ export const STORMS: Storm[] = [
       1: [s("power-6"), s("power-5"), s("power-4")],
       2: [s("power-10"), s("power-11"), s("power-7")],
       3: [s("water-4", "water-5"), s("water-1", "water-3")],
-      4: [s("hospital-6"), s("hospital-5"), s("hospital-7")],
-      5: [s("shelter-4", "shelter-5", "shelter-8"), s("shelter-2", "shelter-3")],
-      6: [s("police-6"), s("fire-10"), s("police-7"), s("fire-12")],
+      4: [s("shelter-6", "hospital-6"), s("hospital-5", "shelter-4"), s("shelter-2", "hospital-4")],
+      5: [s("police-6"), s("fire-10"), s("police-7"), s("fire-12")],
     },
   },
   {
@@ -105,9 +96,8 @@ export const STORMS: Storm[] = [
       1: [s("power-10"), s("power-11"), s("power-12"), s("power-6")],
       2: [s("power-3"), s("power-4"), s("power-5"), s("power-1")],
       3: [s("water-4", "water-5"), s("water-15", "water-18"), s("water-12", "water-13")],
-      4: [s("hospital-4"), s("hospital-1"), s("hospital-5"), s("hospital-8"), s("hospital-3")],
-      5: [s("shelter-6", "shelter-7"), s("shelter-4", "shelter-5", "shelter-8"), s("shelter-9", "shelter-11")],
-      6: [s("police-10"), s("fire-15"), s("police-11"), s("fire-19"), s("police-12"), s("fire-16")],
+      4: [s("hospital-4", "shelter-2"), s("hospital-5", "shelter-4"), s("hospital-7", "shelter-7")],
+      5: [s("police-10"), s("fire-15"), s("police-11"), s("fire-19"), s("police-12"), s("fire-16")],
     },
   },
   {
@@ -118,9 +108,8 @@ export const STORMS: Storm[] = [
       1: [s("power-16"), s("power-17"), s("power-18"), s("power-14"), s("power-13"), s("power-12")],
       2: [s("power-11"), s("power-19"), s("power-20"), s("power-21")],
       3: [s("water-8", "water-19"), s("water-15", "water-18"), s("water-16", "water-17")],
-      4: [s("hospital-13"), s("hospital-12"), s("hospital-11"), s("hospital-10"), s("hospital-9"), s("hospital-7")],
-      5: [s("shelter-14", "shelter-15", "shelter-16"), s("shelter-9", "shelter-11"), s("shelter-10", "shelter-7")],
-      6: [s("police-13"), s("fire-8"), s("fire-7"), s("police-11"), s("fire-20"), s("police-10")],
+      4: [s("hospital-12", "shelter-13"), s("hospital-11", "shelter-12"), s("shelter-16", "hospital-10")],
+      5: [s("police-13"), s("fire-8"), s("fire-7"), s("police-11"), s("fire-20"), s("police-10")],
     },
   },
   {
@@ -131,9 +120,8 @@ export const STORMS: Storm[] = [
       1: [s("power-21"), s("power-20"), s("power-19"), s("power-7"), s("power-15"), s("power-14")],
       2: [s("power-16"), s("power-17"), s("power-18"), s("power-13"), s("power-12"), s("power-11")],
       3: [s("water-15", "water-18", "water-16", "water-17"), s("water-8", "water-19", "water-7"), s("water-9", "water-10")],
-      4: [s("hospital-11"), s("hospital-10"), s("hospital-8"), s("hospital-9"), s("hospital-5"), s("hospital-4")],
-      5: [s("shelter-11", "shelter-9"), s("shelter-4", "shelter-5", "shelter-8"), s("shelter-14", "shelter-15", "shelter-16")],
-      6: [s("fire-18"), s("police-13"), s("fire-17"), s("police-12"), s("fire-16"), s("police-7")],
+      4: [s("hospital-11", "shelter-12"), s("hospital-6", "shelter-6"), s("shelter-16", "hospital-10")],
+      5: [s("fire-18"), s("police-13"), s("fire-17"), s("police-12"), s("fire-16"), s("police-7")],
     },
   },
 ];
@@ -203,6 +191,50 @@ export function visibleFacilityIds(storm: Storm, level: LevelNumber): string[] {
     .map((f) => f.id);
 }
 
+/** Small seeded PRNG (mulberry32), so the same storm always groups its stations the same way. */
+function seeded(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Level 2's payoff: the transmission lines for every other visible power station, as several separate chains (never one
+ * network) about as long as the player's own. Deterministic per storm: a seeded pick of where each chain starts, then its
+ * nearest unused stations, in nearest-neighbor order. A leftover short of a chain of 2 joins the nearest chain's end.
+ */
+export function transmissionChains(storm: Storm): string[][] {
+  const answer = storm.levels[2].map((st) => st.facilityIds[0]);
+  const taken = new Set(answer);
+  const rest = visibleFacilityIds(storm, 2).filter((id) => !taken.has(id));
+  // About as many chains as the answer's length fits (at least two when there are enough stations), evenly sized.
+  const size = Math.ceil(rest.length / (rest.length < 4 ? 1 : Math.max(2, Math.round(rest.length / Math.max(2, answer.length)))));
+  const rand = seeded([...storm.name].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261));
+  const dist = (a: string, b: string) => Math.hypot(FACILITY_BY_ID[a].x - FACILITY_BY_ID[b].x, FACILITY_BY_ID[a].y - FACILITY_BY_ID[b].y);
+  const chains: string[][] = [];
+  while (rest.length) {
+    const chain = [rest.splice(Math.floor(rand() * rest.length), 1)[0]];
+    while (chain.length < size && rest.length) {
+      const tail = chain[chain.length - 1];
+      const next = rest.reduce((best, id) => (dist(tail, id) < dist(tail, best) ? id : best));
+      rest.splice(rest.indexOf(next), 1);
+      chain.push(next);
+    }
+    chains.push(chain);
+  }
+  const lone = chains.findIndex((c) => c.length < 2);
+  if (lone >= 0 && chains.length > 1) {
+    const [id] = chains.splice(lone, 1)[0];
+    const host = chains.reduce((best, c) => (dist(c[c.length - 1], id) < dist(best[best.length - 1], id) ? c : best));
+    host.push(id);
+  }
+  return chains.filter((c) => c.length >= 2);
+}
+
 /** Dev check: returns a list of problems (empty when the data is sound). */
 export function validateStorms(): string[] {
   const problems: string[] = [];
@@ -224,6 +256,7 @@ export function validateStorms(): string[] {
       if (interaction === "circle") {
         steps.forEach((st, i) => {
           if (st.facilityIds.length < 2 || st.facilityIds.length > 4) problems.push(`${where}: group ${i} size`);
+          if (types.length > 1 && new Set(st.facilityIds.map((id) => FACILITY_BY_ID[id].type)).size < types.length) problems.push(`${where}: group ${i} should mix ${types.join(" and ")}`);
           steps.forEach((other, j) => {
             if (i !== j) for (const id of other.facilityIds) if (nearGroup(FACILITY_BY_ID[id], st, 45)) problems.push(`${where}: ${id} too close to group ${i}`);
           });
@@ -241,6 +274,7 @@ export const COPY = {
   beginTitle: "Restore the Grid",
   beginHint: "Touch to begin",
   stormComing: "A storm is coming",
+  stormAftermath: "The storm has knocked out power and utilities and it's up to you to restore services to the region.",
   outroTitle: "The lights are back on!",
   outroBody: "You restored power in the same order it was lost. Real crews do this every storm: hospitals, water and shelters first, so people stay safe.",
   exit: "Exit",

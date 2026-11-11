@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FACILITIES, FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, finalJingle, levelJingle, playStorm, preloadStorm, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
+import { buzz, finalJingle, levelJingle, playStorm, popTick, preloadStorm, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
@@ -10,6 +10,7 @@ import {
   explainMistake,
   pointInPolygon,
   stormZones,
+  transmissionChains,
   visibleFacilityIds,
   type LevelNumber,
   type Storm,
@@ -32,6 +33,10 @@ const RESTORED_COLOR = "#4ade80";
  * playing instead, call showExitPaths in startLevel(EXIT_PATHS_LEVEL) and drop it from finishLevel.
  */
 const EXIT_PATHS_LEVEL: LevelNumber = 3;
+/** The level whose completion lights the transmission lines of the other stations (see transmissionChains). */
+const TRANSMISSION_LEVEL: LevelNumber = 2;
+/** Matches TRANSMISSION_STAGGER_MS in ElectricGridMap.tsx. */
+const TRANSMISSION_STAGGER_MS = 450;
 /**
  * Completion beat (the payoff) before the next level starts; the level-box pulse (900ms) and the icon throb (up to
  * ~700ms delay + 2 x 1100ms) must finish inside it.
@@ -42,10 +47,20 @@ const EXIT_PATHS_DONE_MS = 4500;
 /** Outro: pause with every icon hidden, gap between zones switching off, and how long the final reveal plays before the card. */
 const OUTRO_HIDDEN_MS = 1000;
 const OUTRO_ZONE_MS = 300;
-const OUTRO_REVEAL_MS = 6000; // the final jingle (~6 s) plays over it
+/** Outro final reveal: every icon grows on in random order over OUTRO_GROW_MS while the final jingle (~6 s) plays; the water flows show as its closing chord lands, and the throbbing then settles for OUTRO_SETTLE_MS before the card. */
+const OUTRO_GROW_MS = 3500;
+const OUTRO_JINGLE_MS = 5000; // where the jingle's closing chord falls
+const OUTRO_SETTLE_MS = 3500;
+/** Pre-storm intro beats: the establishing shot (zones, labels and level-1 icons) before the storm, the storm, then the message. */
+const INTRO_ESTABLISH_MS = 3500;
+const INTRO_STORM_MS = 5000;
+const INTRO_POP_MS = 300; // gap between zones popping off
+const INTRO_MESSAGE_MS = 5000;
+/** How long the transmission-line payoff (level 2) plays, so its chains (TRANSMISSION_STAGGER_MS apart) can be seen. */
+const TRANSMISSION_DONE_MS = 4500;
 
 /** Level intro beats: spotlight fade, and pauses after each typed panel so it can be read. */
-const SPOT_FADE_MS = 500;
+const SPOT_FADE_MS = 1200; // matches the spotlight box transition (duration-[1200ms])
 const READ_PAUSE_MS = 700;
 
 /** Spotlight targets: a circle centered on the level message / instruction panel (cx, cy in % of the map), diameter in % of the map width. Much larger than the target so the text never clips. */
@@ -83,6 +98,7 @@ export default function ElectricGridGame({
   const [phase, setPhase] = useState<Phase>("begin");
   const [storm, setStorm] = useState<Storm>(STORMS[0]);
   const [card, setCard] = useState(false);
+  const [aftermath, setAftermath] = useState(false); // the centered "up to you" message after the storm
   // Spotlight: the box keeps its last target while it fades out (`on` false).
   const [spotState, setSpotState] = useState<{ target: Spot; on: boolean }>({ target: "message", on: false });
   const setSpot = (target: Spot | null) => setSpotState((p) => ({ target: target ?? p.target, on: target !== null }));
@@ -118,10 +134,13 @@ export default function ElectricGridGame({
     map.current?.message.reset();
     setSpot(null);
     setCard(false);
+    setAftermath(false);
     go("begin");
   };
 
-  const idle = useIdlePrompt({ active: phase !== "begin", timeoutMs: idleTimeoutMs, countdownMs: idleCountdownMs, onReset: reset });
+  // Only watch for inactivity during real play (levels) and on the final completion card, not the begin/choose screens or the intro / storm / outro animations (those are long and hands-off). The timer restarts each time it becomes active.
+  const idleActive = phase === "briefing" || phase === "watch" || phase === "play" || phase === "levelDone" || (phase === "outro" && card);
+  const idle = useIdlePrompt({ active: idleActive, timeoutMs: idleTimeoutMs, countdownMs: idleCountdownMs, onReset: reset });
 
   /** Pulses each remaining outage step in order, with a blip of sound. When `lose` is set the facilities also go grey. */
   const playOutages = async (n: LevelNumber, token: number, lose: boolean) => {
@@ -151,7 +170,12 @@ export default function ElectricGridGame({
     map.current?.level.setProgress(info.slots.length / 7);
     map.current?.instruction.hideInstruction(false); // shown fresh at step 2
     map.current?.instruction.hideReplay(false);
-    map.current?.hideFacilities(true); // only this level's icons stay on the map, and not until step 3
+    // Only this level's icons stay on the map, shown through the briefing. The icons that lost power are already out (level 1 keeps them from the intro).
+    if (n > 1) {
+      map.current?.hideFacilities(true);
+      map.current?.setFacilities(ids, "ok", true);
+      map.current?.setFacilities(l.storm.levels[n].flatMap((st) => st.facilityIds), "outage", true);
+    }
     // 1. The level description types out under a spotlight.
     setSpot("message");
     if (!(await wait(SPOT_FADE_MS, token))) return;
@@ -167,9 +191,8 @@ export default function ElectricGridGame({
     if (!(await wait(SPOT_FADE_MS, token))) return;
     go("watch");
     map.current?.instruction.showReplay();
-    map.current?.setFacilities(ids, "ok", true);
     if (!(await wait(1600, token))) return;
-    if (!(await playOutages(n, token, true))) return;
+    if (!(await playOutages(n, token, false))) return; // the out icons stay out; the order just blips, as with replay
     go("play");
   };
 
@@ -184,12 +207,14 @@ export default function ElectricGridGame({
     const zones = stormZones(live.current.storm);
     map.current?.hideZonesOutward(zones, OUTRO_ZONE_MS, zoneTick); // 2. zones off, center out, counter-clockwise
     if (!(await wait(zones.length * OUTRO_ZONE_MS + 1000, token))) return;
-    const all = FACILITIES.map((f) => f.id); // 3. every icon back, with the water flows, all throbbing
-    map.current?.setFacilities(all, "ok", true);
-    map.current?.showExitPaths(true);
-    map.current?.throb(all, 4);
+    const all = FACILITIES.map((f) => f.id); // 3. every icon grows back on in random order, then the water flows, all throbbing
+    map.current?.growFacilities(all, OUTRO_GROW_MS, popTick);
     finalJingle();
-    if (!(await wait(OUTRO_REVEAL_MS, token))) return;
+    if (!(await wait(OUTRO_JINGLE_MS - 1500, token))) return;
+    map.current?.showExitPaths(true);
+    if (!(await wait(1500, token))) return;
+    map.current?.throb(all, 3);
+    if (!(await wait(OUTRO_SETTLE_MS, token))) return;
     setCard(true);
   };
 
@@ -205,8 +230,17 @@ export default function ElectricGridGame({
     map.current?.throb([...live.current.restored]);
     const revealPaths = n === EXIT_PATHS_LEVEL;
     if (revealPaths) map.current?.showExitPaths(true, visibleFacilityIds(live.current.storm, n));
-    if (!(await wait(revealPaths ? EXIT_PATHS_DONE_MS : LEVEL_DONE_MS, token))) return;
-    if (n < 6) await startLevel((n + 1) as LevelNumber, token);
+    // Level 2 also lights the transmission lines: the player's own chain first, then separate chains for the other stations.
+    const lines = n === TRANSMISSION_LEVEL;
+    if (lines) {
+      const mine = live.current.storm.levels[n].map((st) => st.facilityIds[0]);
+      const chains = [mine, ...transmissionChains(live.current.storm)];
+      map.current?.showTransmission(chains);
+      chains.forEach((_, i) => window.setTimeout(() => run.current === token && tone(330 + i * 110, 300, "triangle"), i * TRANSMISSION_STAGGER_MS));
+    }
+    if (!(await wait(revealPaths ? EXIT_PATHS_DONE_MS : lines ? TRANSMISSION_DONE_MS : LEVEL_DONE_MS, token))) return;
+    if (lines) map.current?.dimTransmission(); // stays under the icons for the rest of the game
+    if (n < 5) await startLevel((n + 1) as LevelNumber, token);
     else await outro(token);
   };
 
@@ -232,13 +266,31 @@ export default function ElectricGridGame({
     playStorm();
     if (!(await wait(3600, token))) return;
     setCard(false);
+    // 0. Establishing shot: the affected zones (still blue), every zone name label, and every power station inside the affected zones, all on.
     const zones = stormZones(next);
-    map.current?.showStorm(zones, 3500);
-    if (!(await wait(1200, token))) return;
-    map.current?.showZones(zones, true, 350);
-    if (!(await wait(Math.max(2600, zones.length * 350 + 800), token))) return;
+    const power = visibleFacilityIds(next, 1); // the power stations inside the affected zones
+    map.current?.showZoneLabels();
+    map.current?.setFacilities(power, "ok", true);
+    if (!(await wait(INTRO_ESTABLISH_MS, token))) return;
+    // 1. The storm rolls in. 2. The affected power stations go out one by one as it passes over them.
+    map.current?.showStorm(zones, INTRO_STORM_MS);
+    const out = next.levels[1].flatMap((st) => st.facilityIds); // the ones that lose power, in outage order
+    out.forEach((id, i) => {
+      window.setTimeout(() => {
+        if (run.current !== token) return;
+        map.current?.setFacilities([id], "outage", true);
+        tone(200 + (i % 5) * 40, 160, "triangle");
+      }, INTRO_STORM_MS * 0.25 + (INTRO_STORM_MS * 0.6 * i) / Math.max(1, out.length));
+    });
+    if (!(await wait(INTRO_STORM_MS, token))) return;
+    // 3. The message shows, centered, over the storm. 4. Then the storm goes away and the labels and zones clear.
+    setAftermath(true);
+    if (!(await wait(INTRO_MESSAGE_MS, token))) return;
+    setAftermath(false);
+    map.current?.hideZoneLabels(true);
     map.current?.hideStorm(1200);
-    if (!(await wait(1400, token))) return;
+    map.current?.popOffZones(zones, INTRO_POP_MS, zoneTick);
+    // 5. Level 1 begins right away, with no wait; the zones keep popping off behind its first highlight.
     await startLevel(1, token);
   };
 
@@ -389,6 +441,7 @@ export default function ElectricGridGame({
         <ElectricGridMap
           ref={map}
           onReplay={replay}
+          onQuit={reset}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerEnd}
@@ -404,7 +457,7 @@ export default function ElectricGridGame({
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-[opacity,left,top,width] duration-500 motion-reduce:transition-none"
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-[opacity,left,top,width] duration-[1200ms] ease-in-out motion-reduce:transition-none"
           style={{
             left: `${SPOTLIGHTS[spotState.target].cx}%`,
             top: `${SPOTLIGHTS[spotState.target].cy}%`,
@@ -432,6 +485,12 @@ export default function ElectricGridGame({
             <p className="text-3xl text-white">{storm.name}</p>
             <p className="max-w-2xl text-2xl text-slate-200">{storm.blurb}</p>
           </Card>
+        )}
+
+        {phase === "intro" && aftermath && (
+          <p className="pointer-events-none absolute left-1/2 top-1/2 w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-slate-950/80 px-12 py-8 text-center text-4xl leading-snug text-white">
+            {COPY.stormAftermath}
+          </p>
         )}
 
         {phase === "outro" && card && (

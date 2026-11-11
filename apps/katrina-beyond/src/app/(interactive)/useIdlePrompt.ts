@@ -68,6 +68,7 @@ export function useIdlePrompt({ active, timeoutMs = 30_000, countdownMs = 30_000
       window.clearInterval(tick);
       ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, mark));
       promptingRef.current = false;
+      setPrompting(false);
     };
   }, [active, timeoutMs, countdownMs]);
 

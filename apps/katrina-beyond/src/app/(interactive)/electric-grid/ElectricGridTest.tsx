@@ -65,10 +65,10 @@ const groups: [title: string, actions: Action[]][] = [
   [
     "Instruction",
     [
-      ...([1, 2, 3, 4, 5, 6] as const).map((n): Action => [`showInstruction level-${n}`, (m) => m.instruction.showInstruction(`level-${n}`)]),
+      ...([1, 2, 3, 4, 5] as const).map((n): Action => [`showInstruction level-${n}`, (m) => m.instruction.showInstruction(`level-${n}`)]),
       ["showInstruction 1 (number)", (m) => m.instruction.showInstruction(1)],
-      ["showReplay", (m) => m.instruction.showReplay()],
-      ["hideReplay", (m) => m.instruction.hideReplay()],
+      ["showReplay + quit", (m) => m.instruction.showReplay()],
+      ["hideReplay + quit", (m) => m.instruction.hideReplay()],
       ["showMessage (sample mistake)", (m) => m.instruction.showMessage("That wasn't the group that lost power second. Circle only the dark ones that went out together, in order.")],
       ["hideMessage", (m) => m.instruction.hideMessage()],
       ["hide", (m) => m.instruction.hideInstruction()],

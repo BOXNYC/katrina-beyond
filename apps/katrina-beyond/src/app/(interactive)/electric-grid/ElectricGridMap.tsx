@@ -26,6 +26,30 @@ export type ElectricGridMapHandle = {
    * tint fades in at OUTRO_ZONE_OPACITY instead of the usual group opacity, so it is clearly visible.
    */
   hideZonesOutward: (zones: (number | string)[], delay?: number, onZone?: (index: number, total: number) => void) => void;
+  /**
+   * The pre-storm "pop off": switches the given zones off (their tint cleared) one after another, `delay` ms apart,
+   * in the reverse of hideZonesOutward's order (outer rings first, clockwise); icons stay on.
+   * `onZone` fires as each zone pops, for a matching sound.
+   */
+  popOffZones: (zones: (number | string)[], delay?: number, onZone?: (index: number, total: number) => void) => void;
+  /** Fades in the name labels of the given zones (those that have art). */
+  showZoneLabels: (transition?: boolean) => void;
+  /** Hides every zone label, instantly unless `transition` is true. */
+  hideZoneLabels: (transition?: boolean) => void;
+  /**
+   * Grows the given icons on one after another in a random order, spread over `durationMs`: each fades in while scaling
+   * up from nothing. `onStep` fires as each one starts (for a matching sound).
+   */
+  growFacilities: (ids: string[], durationMs: number, onStep?: (index: number, total: number) => void) => void;
+  /**
+   * Draws a layer of transmission lines, one polyline per chain of facility ids, in the style of the player's connect
+   * path. Chains fade in one after another (TRANSMISSION_STAGGER_MS apart); the first is the player's own.
+   */
+  showTransmission: (chains: string[][], transition?: boolean) => void;
+  /** Fades the transmission layer down to a low opacity, so it reads as part of the map under the icons. */
+  dimTransmission: (transition?: boolean) => void;
+  /** Clears the transmission layer, instantly unless `transition` is true. */
+  hideTransmission: (transition?: boolean) => void;
   /** Shows only the given icon types (hides all others first). */
   showIcons: (names: IconName | IconName[]) => void;
   /** Hides all icons. */
@@ -80,6 +104,10 @@ const CSS = [
   ".electric-grid-map { display: block; touch-action: none; user-select: none; -webkit-user-select: none; }",
   ".electric-grid-map use { opacity: 0; }",
   ".electric-grid-map .exit-paths { opacity: 0; }",
+  ".electric-grid-map .zone-labels image { opacity: 0; }",
+  ".electric-grid-map .transmission-lines { opacity: 0; }",
+  ".electric-grid-map .transmission-lines g { opacity: 0; }",
+  ".electric-grid-map use.icon-grow { transform-box: view-box; transform-origin: var(--throb-origin, 0 0); animation: eg-icon-grow 700ms cubic-bezier(0.2, 1.3, 0.4, 1) backwards; }",
   ".electric-grid-map use.icon-throb { transform-box: view-box; transform-origin: var(--throb-origin, 0 0); animation: eg-icon-throb var(--throb-dur, 0.8s) ease-in-out var(--throb-delay, 0s) var(--throb-count, 2); }",
   ".electric-grid-map .zones rect { fill: var(--zone-color, #1e00fc); }",
   ".electric-grid-map .pulse-ring { fill: none; stroke-width: 7; transform-box: fill-box; transform-origin: center; animation: eg-pulse 0.9s ease-out 2 forwards; }",
@@ -88,8 +116,9 @@ const CSS = [
   ".electric-grid-map .static-ring.select { stroke: #67e8f9; }",
   "@keyframes eg-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }",
   "@keyframes eg-throb { from { opacity: 0.4; } to { opacity: 1; } }",
+  "@keyframes eg-icon-grow { from { transform: scale(0); } to { transform: scale(1); } }",
   "@keyframes eg-icon-throb { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.75); } }",
-  "@media (prefers-reduced-motion: reduce) { .electric-grid-map use.icon-throb { animation: none; } }",
+  "@media (prefers-reduced-motion: reduce) { .electric-grid-map use.icon-throb, .electric-grid-map use.icon-grow { animation: none; } }",
 ].join(" ");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -100,10 +129,38 @@ const ZONE_RING = 400;
 /** Normal opacity of the zones group (the tint is faint on purpose), and the stronger one used while the outro fades zones back in. */
 const ZONE_OPACITY = 0.141;
 const OUTRO_ZONE_OPACITY = 0.3;
+/** Delay between transmission chains fading in, and the opacity the layer settles at so it reads as part of the map. */
+const TRANSMISSION_STAGGER_MS = 450;
+const TRANSMISSION_DIM_OPACITY = 0.3;
+const TRANSMISSION_DIM_MS = 1500;
 /** A flow starts/ends on a water icon if its endpoint is within this many map units of it. */
 const FLOW_SNAP = 60;
 /** Delay between flows fading in when only some are shown. */
 const FLOW_STAGGER_MS = 150;
+
+/** Zone name labels exported from the PSD (x/y/size in map units; zone is the zone each one names). English Turn, Waggerman and Kenner sit off the canvas, so they are left out. */
+const ZONE_LABELS = [
+  { zone: 15, file: "marrero", x: 835, y: 1550, w: 85, h: 17 },
+  { zone: 14, file: "harvey", x: 1085, y: 1526, w: 77, h: 22 },
+  { zone: 13, file: "gretna", x: 1250, y: 1443, w: 74, h: 18 },
+  { zone: 12, file: "algiers", x: 1361, y: 1265, w: 76, h: 22 },
+  { zone: 20, file: "stanton", x: 1913, y: 1448, w: 85, h: 18 },
+  { zone: 19, file: "chalmette", x: 1706, y: 1073, w: 113, h: 18 },
+  { zone: 11, file: "arabi", x: 1467, y: 1022, w: 58, h: 17 },
+  { zone: 4, file: "marigny-bywater-district", x: 1275, y: 888, w: 90, h: 75 },
+  { zone: 5, file: "french-quarter", x: 1104, y: 1055, w: 84, h: 48 },
+  { zone: 6, file: "warehouse-district", x: 1057, y: 1158, w: 125, h: 46 },
+  { zone: 1, file: "mid-city-district", x: 990, y: 966, w: 93, h: 47 },
+  { zone: 7, file: "garden-district", x: 977, y: 1259, w: 80, h: 47 },
+  { zone: 8, file: "uptown-district", x: 750, y: 1208, w: 84, h: 46 },
+  { zone: 3, file: "gentilly-district", x: 1161, y: 651, w: 83, h: 47 },
+  { zone: 10, file: "east-district", x: 1658, y: 554, w: 77, h: 46 },
+  { zone: 17, file: "village-de-least-district", x: 2207, y: 329, w: 102, h: 75 },
+  { zone: 18, file: "venetian-isles-district", x: 1865, y: 778, w: 94, h: 75 },
+  { zone: 2, file: "lakeview-district", x: 845, y: 733, w: 103, h: 46 },
+  { zone: 9, file: "metairie", x: 369, y: 860, w: 88, h: 17 },
+  { zone: 16, file: "westwego", x: 385, y: 1467, w: 117, h: 22 },
+] as const;
 
 type Flow = { els: SVGElement[]; icons: string[] };
 
@@ -119,8 +176,9 @@ export default function ElectricGridMap({
   ref,
   className,
   onReplay,
+  onQuit,
   ...svgProps
-}: Omit<SVGProps<SVGSVGElement>, "ref"> & { ref?: Ref<ElectricGridMapHandle>; onReplay?: () => void }) {
+}: Omit<SVGProps<SVGSVGElement>, "ref"> & { ref?: Ref<ElectricGridMapHandle>; onReplay?: () => void; onQuit?: () => void }) {
   const svg = useRef<SVGSVGElement>(null);
   const timers = useRef<number[]>([]);
   const stormCanvas = useRef<HTMLCanvasElement>(null);
@@ -214,13 +272,53 @@ export default function ElectricGridMap({
     );
   };
 
+  /** Zones' elements in the order hideZonesOutward switches them: by distance band from the map center, then counter-clockwise from due east. */
+  const zoneOrder = (zones: (number | string)[]) => {
+    const polar = zones.flatMap((zone) => {
+      const el = zoneEl(zone);
+      if (!el) return [];
+      const b = (el as unknown as SVGGraphicsElement).getBBox();
+      const dx = b.x + b.width / 2 - MAP_CENTER.x;
+      const dy = MAP_CENTER.y - (b.y + b.height / 2); // screen y points down
+      const angle = (Math.atan2(dy, dx) + 2 * Math.PI) % (2 * Math.PI);
+      return [{ zone, el, ring: Math.floor(Math.hypot(dx, dy) / ZONE_RING), angle }];
+    });
+    return polar.sort((a, b) => a.ring - b.ring || a.angle - b.angle);
+  };
+
+  /** Pivot for scaling a <use> icon about its center (it has no reliable fill-box, so use the center in user units; otherwise it scales from the SVG origin and slides). */
+  const setPivot = (el: SVGElement) => {
+    const icon = svg.current?.querySelector<SVGImageElement>(el.getAttribute("href") ?? "");
+    const cx = Number(el.getAttribute("x")) + (icon?.width.baseVal.value ?? 0) / 2;
+    const cy = Number(el.getAttribute("y")) + (icon?.height.baseVal.value ?? 0) / 2;
+    el.style.setProperty("--throb-origin", `${cx}px ${cy}px`);
+  };
+
+  const transmission = () => svg.current?.querySelector<SVGGElement>(".transmission-lines");
+
   const hideIcons = () => {
     allIcons().forEach((el) => {
-      el.classList.remove("icon-throb");
+      el.classList.remove("icon-throb", "icon-grow");
       el.style.transition = "none";
       el.style.removeProperty("opacity");
       el.style.removeProperty("filter");
     });
+  };
+
+  const hideZoneLabels = (transition = false) => {
+    svg.current?.querySelectorAll<SVGElement>(".zone-labels image").forEach((el) => {
+      el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
+      el.style.removeProperty("opacity");
+    });
+  };
+
+  const hideTransmission = (transition = false) => {
+    const g = transmission();
+    if (!g) return;
+    g.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
+    g.style.removeProperty("opacity");
+    if (!transition) g.replaceChildren();
+    else window.setTimeout(() => g.replaceChildren(), FADE_MS);
   };
 
   useImperativeHandle(ref, () => ({
@@ -237,6 +335,8 @@ export default function ElectricGridMap({
       hideZones();
       hideIcons();
       hideExitPaths();
+      hideZoneLabels();
+      hideTransmission();
       ringGroup("static-rings")?.replaceChildren();
       ringGroup("pulses")?.replaceChildren();
       ringGroup("path")?.querySelectorAll("path").forEach((p) => p.removeAttribute("d"));
@@ -245,6 +345,74 @@ export default function ElectricGridMap({
     hideZones,
     hideIcons,
     hideExitPaths,
+    hideZoneLabels,
+    hideTransmission,
+    showZoneLabels(transition = true) {
+      svg.current?.querySelectorAll<SVGElement>(".zone-labels image").forEach((el) => {
+        el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
+        el.style.opacity = "1";
+      });
+    },
+    showTransmission(chains, transition = true) {
+      const g = transmission();
+      if (!g) return;
+      g.replaceChildren();
+      chains.forEach((ids, i) => {
+        const pts = ids.map((id) => FACILITY_BY_ID[id]).filter(Boolean);
+        if (pts.length < 2) return;
+        const d = `M${pts.map((p) => `${p.x} ${p.y}`).join("L")}`;
+        const line = document.createElementNS(SVG_NS, "g");
+        // Same look as the player's dashed connect path (overlay .path): a dark underlay and white dots.
+        const under = document.createElementNS(SVG_NS, "path");
+        under.setAttribute("d", d);
+        under.setAttribute("stroke", "#000");
+        under.setAttribute("stroke-opacity", "0.55");
+        under.setAttribute("stroke-width", "14");
+        const dots = document.createElementNS(SVG_NS, "path");
+        dots.setAttribute("d", d);
+        dots.setAttribute("stroke", "#fff");
+        dots.setAttribute("stroke-width", "8");
+        dots.setAttribute("stroke-dasharray", "4 18");
+        line.append(under, dots);
+        line.style.transition = transition ? `opacity ${FADE_MS}ms ease ${i * TRANSMISSION_STAGGER_MS}ms` : "none";
+        g.appendChild(line);
+      });
+      g.style.transition = "none";
+      g.style.opacity = "1";
+      void g.getBoundingClientRect(); // so the chains fade in from 0
+      g.querySelectorAll<SVGElement>(":scope > g").forEach((line) => (line.style.opacity = "1"));
+    },
+    dimTransmission(transition = true) {
+      const g = transmission();
+      if (!g) return;
+      g.style.transition = transition ? `opacity ${TRANSMISSION_DIM_MS}ms ease` : "none";
+      g.style.opacity = String(TRANSMISSION_DIM_OPACITY);
+    },
+    growFacilities(ids, durationMs, onStep) {
+      // Fisher-Yates shuffle, fresh each run, so the icons come on in no particular order.
+      const order = [...ids];
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      order.forEach((id, i) => {
+        timers.current.push(
+          window.setTimeout(() => {
+            const el = facilityEl(id);
+            if (!el) return;
+            setPivot(el);
+            el.classList.remove("icon-grow");
+            void el.getBoundingClientRect(); // restart the animation
+            el.classList.add("icon-grow");
+            el.addEventListener("animationend", () => el.classList.remove("icon-grow"), { once: true });
+            el.style.transition = `opacity ${FADE_MS / 2}ms ease`;
+            el.style.removeProperty("filter");
+            el.style.opacity = "1";
+            onStep?.(i, order.length);
+          }, (i / order.length) * durationMs),
+        );
+      });
+    },
     showExitPaths(transition = true, visibleIds) {
       const el = exitPaths();
       if (!el) return;
@@ -274,16 +442,7 @@ export default function ElectricGridMap({
           if (!mine.has(el) && !el.style.opacity) el.style.opacity = String(ZONE_OPACITY / OUTRO_ZONE_OPACITY);
         });
       }
-      const polar = zones.flatMap((zone) => {
-        const el = zoneEl(zone);
-        if (!el) return [];
-        const b = (el as unknown as SVGGraphicsElement).getBBox();
-        const dx = b.x + b.width / 2 - MAP_CENTER.x;
-        const dy = MAP_CENTER.y - (b.y + b.height / 2); // screen y points down
-        const angle = (Math.atan2(dy, dx) + 2 * Math.PI) % (2 * Math.PI);
-        return [{ el, ring: Math.floor(Math.hypot(dx, dy) / ZONE_RING), angle }];
-      });
-      polar.sort((a, b) => a.ring - b.ring || a.angle - b.angle);
+      const polar = zoneOrder(zones);
       polar.forEach(({ el }, i) => {
         timers.current.push(
           window.setTimeout(() => {
@@ -294,16 +453,25 @@ export default function ElectricGridMap({
         );
       });
     },
+    popOffZones(zones, delay = 300, onZone) {
+      clearTimers();
+      const order = zoneOrder(zones).reverse();
+      order.forEach(({ el }, i) => {
+        timers.current.push(
+          window.setTimeout(() => {
+            el.style.transition = `opacity ${FADE_MS}ms ease`;
+            el.style.opacity = "0";
+            onZone?.(i, order.length);
+          }, i * delay),
+        );
+      });
+    },
     throb(ids, iterations = 2) {
       ids.forEach((id) => {
         const el = facilityEl(id);
         if (!el) return;
         const h = hash(id);
-        // <use> has no reliable fill-box, so pivot on the icon's center in user units (otherwise it scales from the SVG origin and slides)
-        const icon = svg.current?.querySelector<SVGImageElement>(el.getAttribute("href") ?? "");
-        const cx = Number(el.getAttribute("x")) + (icon?.width.baseVal.value ?? 0) / 2;
-        const cy = Number(el.getAttribute("y")) + (icon?.height.baseVal.value ?? 0) / 2;
-        el.style.setProperty("--throb-origin", `${cx}px ${cy}px`);
+        setPivot(el);
         el.style.setProperty("--throb-dur", `${500 + (h % 600)}ms`);
         el.style.setProperty("--throb-delay", `${(h >>> 10) % 700}ms`);
         el.style.setProperty("--throb-count", String(iterations));
@@ -330,7 +498,7 @@ export default function ElectricGridMap({
     },
     hideFacilities(transition = false) {
       svg.current?.querySelectorAll<SVGElement>("use[data-fid]").forEach((el) => {
-        el.classList.remove("icon-throb");
+        el.classList.remove("icon-throb", "icon-grow");
         el.style.transition = transition ? `opacity ${FADE_MS}ms ease` : "none";
         el.style.removeProperty("opacity");
         el.style.removeProperty("filter");
@@ -529,6 +697,12 @@ export default function ElectricGridMap({
             <rect x={806} y={767} width={398} height={408} mask="url(#zone-1-mask)" data-name="zone 1" />
           </g>
           <image href="/electric-grid/boundary-lines.png" x={0} y={0} width={2932} height={1648} data-name="BOUNDARY LINES" />
+          <g className="zone-labels" pointerEvents="none">
+            {ZONE_LABELS.map((l) => (
+              <image key={l.file} href={`/electric-grid/zone-labels/${l.file}.png`} x={l.x} y={l.y} width={l.w} height={l.h} data-zone={l.zone} />
+            ))}
+          </g>
+          <g className="transmission-lines" fill="none" strokeLinecap="round" strokeLinejoin="round" pointerEvents="none" />
           <g className="water-sewer-facilities">
             <g className="water-icons">
               <g className="exit-paths" fill="none" stroke="#0CA3D2" strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="0 20">
@@ -709,7 +883,7 @@ export default function ElectricGridMap({
       />
       <LevelBox ref={levelBox} />
       <LevelMessage ref={messageBox} />
-      <InstructionBox ref={instructionBox} onReplay={onReplay} />
+      <InstructionBox ref={instructionBox} onReplay={onReplay} onQuit={onQuit} />
     </div>
   );
 }

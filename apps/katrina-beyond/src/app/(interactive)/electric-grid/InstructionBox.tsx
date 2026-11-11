@@ -3,43 +3,41 @@
 import { typeTick } from "@/lib/electricGridSound";
 import { useEffect, useId, useImperativeHandle, useRef, type KeyboardEvent, type Ref, type SVGProps } from "react";
 
-export type InstructionName = "level-1" | "level-2" | "level-3" | "level-4" | "level-5" | "level-6";
+export type InstructionName = "level-1" | "level-2" | "level-3" | "level-4" | "level-5";
 
 /** Names from before the panels became per-level. */
 export type LegacyInstructionName =
   | "touch-power"
   | "connect-power"
   | "circle-water"
-  | "touch-hospitals"
-  | "circle-shelters"
+  | "circle-hospitals-shelters"
   | "touch-firehouse-police";
 
 const LEGACY: Record<LegacyInstructionName, number> = {
   "touch-power": 1,
   "connect-power": 2,
   "circle-water": 3,
-  "touch-hospitals": 4,
-  "circle-shelters": 5,
-  "touch-firehouse-police": 6,
+  "circle-hospitals-shelters": 4,
+  "touch-firehouse-police": 5,
 };
 
 export type InstructionBoxHandle = {
-  /** Hides the panel and the replay button without transition. */
+  /** Hides the panel and the replay / quit buttons without transition. */
   reset: () => void;
   /**
-   * Shows the panel for the given level (name, legacy name or 1-6), replacing any instruction already showing. The
+   * Shows the panel for the given level (name, legacy name or 1-5), replacing any instruction already showing. The
    * panel fades in, then its caption is "typed" (revealed left to right in steps). The promise resolves once that
    * has finished: at once without a transition or with reduced motion, and also if the panel is hidden or reset meanwhile.
    */
   showInstruction: (name: InstructionName | LegacyInstructionName | number, transition?: boolean) => Promise<void>;
-  /** Hides the panel and its instruction (not the replay button). */
+  /** Hides the panel and its instruction (not the buttons). */
   hideInstruction: (transition?: boolean) => void;
-  /** Shows the replay button. */
+  /** Shows the replay and quit buttons (the row above the panel). */
   showReplay: (transition?: boolean) => void;
-  /** Hides the replay button. */
+  /** Hides the replay and quit buttons. */
   hideReplay: (transition?: boolean) => void;
   /**
-   * Fades the current instruction out and a text message in inside the box (the container and replay button stay).
+   * Fades the current instruction out and a text message in inside the box (the container and buttons stay).
    * One message at a time: a new one replaces the old. It stays until hideMessage() (the game calls it on the next
    * input) or MESSAGE_MS passes after the text has finished typing (character by character, with a trailing caret that disappears when typing ends), then the
    * instruction that was showing comes back.
@@ -57,7 +55,7 @@ const CAPTION_MS = 1400;
 const CAPTION_STEPS = 24;
 /** Delay between typed characters of a message. */
 const TYPE_MS = 35;
-/** Message text layout, in svg units: clear of the replay button (top-right), padded from the box edges. */
+/** Message text layout, in svg units, padded from the box edges. */
 const MSG = { x: 2347, width: 456, top: 1135, bottom: 1545, size: 40, lineHeight: 54 } as const;
 
 /**
@@ -82,12 +80,12 @@ const CONNECT: Pt[] = [
 const CONNECT_D = "M" + CONNECT.map((p) => p.join(" ")).join(" L");
 
 /**
- * Levels 3 and 5's dashed loop ("Shape 1" art): an ellipse fit to it and the angles (degrees, y down) its stroke runs
+ * Levels 3 and 4's dashed loop ("Shape 1" art): an ellipse fit to it and the angles (degrees, y down) its stroke runs
  * from and to, padded into its gap so the reveal mask covers every dash. The stroke ends where the hand rests.
  */
 const LOOPS: Record<number, { cx: number; cy: number; rx: number; ry: number; from: number; to: number }> = {
   3: { cx: 2540, cy: 1188, rx: 152, ry: 128, from: 104, to: 404 },
-  5: { cx: 2545, cy: 1170, rx: 140, ry: 120, from: 32, to: -305 },
+  4: { cx: 2545, cy: 1170, rx: 140, ry: 120, from: 32, to: -305 },
 };
 const LOOP_SAMPLES = 48;
 
@@ -118,14 +116,15 @@ const DIM: Keyframe = { opacity: 0.35, transform: "scale(1)" };
 const POP: Keyframe = { opacity: 1, transform: "scale(1.18)" };
 
 /**
- * The panel bed, every panel and the replay button are hidden by default. The replay button is only interactive while
- * shown (inline pointer-events), and gives press feedback.
+ * The panel bed, every panel and the replay / quit buttons are hidden by default. The buttons are only interactive while
+ * shown (inline pointer-events), and give press feedback.
  */
 const CSS = `
 .instruction-box > * { opacity: 0; }
-.instruction-box .replay-button { pointer-events: none; cursor: pointer; outline: none; transform-box: fill-box; transform-origin: center; transition: transform 120ms ease; }
-.instruction-box .replay-button:active { transform: scale(0.94); }
-.instruction-box .replay-button:focus-visible .replay-ring { stroke-width: 5; }
+.instruction-box .panel-button { pointer-events: none; cursor: pointer; outline: none; transform-box: fill-box; transform-origin: center; transition: transform 120ms ease, filter 120ms ease; -webkit-tap-highlight-color: transparent; }
+.instruction-box .panel-button:active { transform: scale(0.94); filter: brightness(0.85); }
+.instruction-box .panel-button .button-hit { fill: rgba(0,0,0,0.01); stroke: none; }
+.instruction-box .panel-button:focus-visible .button-hit { stroke: #fff; stroke-width: 4; }
 .instruction-box .message-cursor { animation: instruction-cursor 1s steps(1) infinite; }
 @keyframes instruction-cursor { 50% { opacity: 0; } }
 .instruction-box [data-step] { transform-box: fill-box; transform-origin: center; }
@@ -164,8 +163,9 @@ export default function InstructionBox({
   style,
   className,
   onReplay,
+  onQuit,
   ...svgProps
-}: Omit<SVGProps<SVGSVGElement>, "ref"> & { ref?: Ref<InstructionBoxHandle>; onReplay?: () => void }) {
+}: Omit<SVGProps<SVGSVGElement>, "ref"> & { ref?: Ref<InstructionBoxHandle>; onReplay?: () => void; onQuit?: () => void }) {
   const svg = useRef<SVGSVGElement>(null);
   const shown = useRef<number | null>(null); // level panel currently meant to be showing
   const messageUp = useRef(false);
@@ -305,15 +305,15 @@ export default function InstructionBox({
 
   const panels = () => [...(svg.current?.querySelectorAll(":scope > g[data-panel]") ?? [])];
   const bed = () => svg.current?.querySelector(":scope > .ai-box-container");
-  const replay = () => svg.current?.querySelector<SVGGElement>(":scope > .replay-button");
+  const buttons = () => [...(svg.current?.querySelectorAll<SVGGElement>(":scope > .panel-button") ?? [])];
 
   const setReplay = (on: boolean, transition: boolean) => {
-    const el = replay();
-    if (!el) return;
-    fade(el, on, transition);
-    el.style.pointerEvents = on ? "auto" : "none";
-    el.setAttribute("tabindex", on ? "0" : "-1");
-    el.setAttribute("aria-hidden", on ? "false" : "true");
+    buttons().forEach((el) => {
+      fade(el, on, transition);
+      el.style.pointerEvents = on ? "auto" : "none";
+      el.setAttribute("tabindex", on ? "0" : "-1");
+      el.setAttribute("aria-hidden", on ? "false" : "true");
+    });
   };
 
   const messageEl = () => svg.current?.querySelector<SVGGElement>(":scope > .instruction-message");
@@ -501,10 +501,10 @@ export default function InstructionBox({
     hideMessage: (transition = true) => hideMessageNow(transition),
   }));
 
-  const onKeyDown = (e: KeyboardEvent<SVGGElement>) => {
+  const onKeyDown = (action?: () => void) => (e: KeyboardEvent<SVGGElement>) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
-    onReplay?.();
+    action?.();
   };
 
   return (
@@ -512,20 +512,20 @@ export default function InstructionBox({
       <style>{CSS}</style>
       <svg
         ref={svg}
-        viewBox="2297 983 556 604"
+        viewBox="2297 867 556 720"
         xmlns="http://www.w3.org/2000/svg"
         className={["instruction-box", className].filter(Boolean).join(" ")}
-        style={{ position: "absolute", left: "78.3424%", top: "59.6481%", width: "18.9632%", height: "36.6505%", pointerEvents: "none", ...style }}
+        style={{ position: "absolute", left: "78.3424%", top: "52.6092%", width: "18.9632%", height: "43.6893%", pointerEvents: "none", ...style }}
         {...svgProps}
       >
         <defs>
           <RevealMask id={mask(2)} d={CONNECT_D} width={24} />
-          {[3, 5].map((level) => (
+          {[3, 4].map((level) => (
             <RevealMask key={level} id={mask(level)} d={"M" + loopPoints(level).map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L")} width={70} />
           ))}
         </defs>
         <rect className="ai-box-container" x={2299} y={985} width={552} height={600} rx={30} fill="#000" fillOpacity={0.741} data-name="Container" />
-        <g className="level-6" data-panel={6}>
+        <g className="level-5" data-panel={5}>
           <image data-caption href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2401} y={1446} width={359} height={92} data-name="touch the icons in proper order" />
           <image data-step={3} href="/electric-grid/ui/firehouse-original-art-copy.png" x={2545} y={1056} width={64} height={80} data-name="firehouse original art copy" />
           <image data-step={1} href="/electric-grid/ui/firehouse-original-art-copy-2.png" x={2377} y={1161} width={64} height={80} data-name="firehouse original art copy 2" />
@@ -534,20 +534,13 @@ export default function InstructionBox({
           <image data-step={4} href="/electric-grid/ui/police-original-art-copy-2.png" x={2456} y={1246} width={71} height={77} data-name="police original art copy 2" />
           <image data-hand href="/electric-grid/ui/hand.png" x={2599} y={1261} width={171} height={150} data-name="hand" />
         </g>
-        <g className="level-5" data-panel={5}>
+        <g className="level-4" data-panel={4}>
           <image data-caption href="/electric-grid/ui/circle-the-icon-groups-in-proper-order.png" x={2356} y={1449} width={440} height={92} data-name="circle the icon groups in proper order" />
-          <image data-loop mask={`url(#${mask(5)})`} href="/electric-grid/ui/shape-1.png" x={2370} y={1015} width={349} height={308} data-name="Shape 1" />
+          <image data-loop mask={`url(#${mask(4)})`} href="/electric-grid/ui/shape-1.png" x={2370} y={1015} width={349} height={308} data-name="Shape 1" />
           <image data-step={1} href="/electric-grid/ui/shelter-1-copy.png" x={2470} y={1093} width={65} height={81} data-name="shelter 1 copy" />
-          <image data-step={1} href="/electric-grid/ui/shelter-1-copy.png" x={2503} y={1198} width={65} height={81} data-name="shelter 1 copy 2" />
+          <image data-step={1} href="/electric-grid/ui/hospital-original-art-copy.png" x={2468} y={1203} width={71} height={70} data-name="hospital original art copy" />
           <image data-step={1} href="/electric-grid/ui/shelter-1-copy.png" x={2573} y={1132} width={65} height={81} data-name="shelter 1 copy 3" />
           <image data-hand href="/electric-grid/ui/hand-2.png" x={2602} y={1273} width={155} height={136} data-name="hand" />
-        </g>
-        <g className="level-4" data-panel={4}>
-          <image data-caption href="/electric-grid/ui/touch-the-icons-in-proper-order.png" x={2397} y={1432} width={359} height={92} data-name="touch the icons in proper order" />
-          <image data-step={1} href="/electric-grid/ui/hospital-original-art-copy.png" x={2389} y={1055} width={71} height={70} data-name="hospital original art copy" />
-          <image data-step={2} href="/electric-grid/ui/hospital-original-art-copy-2.png" x={2481} y={1137} width={71} height={70} data-name="hospital original art copy 2" />
-          <image data-step={3} href="/electric-grid/ui/hospital-original-art-copy-3.png" x={2571} y={1223} width={71} height={70} data-name="hospital original art copy 3" />
-          <image data-hand href="/electric-grid/ui/hand-3.png" x={2599} y={1257} width={155} height={136} data-name="hand" />
         </g>
         <g className="level-3" data-panel={3}>
           <image data-caption href="/electric-grid/ui/circle-icon-groups-to-restore-water-supply.png" x={2343} y={1431} width={471} height={92} data-name="circle icon groups to restore water supply" />
@@ -586,17 +579,16 @@ export default function InstructionBox({
           />
           <rect className="message-cursor" fill="#fff" fillOpacity={0.73} width={3} height={MSG.size} />
         </g>
-        <g
-          className="replay-button"
-          role="button"
-          aria-label="Replay"
-          aria-hidden="true"
-          tabIndex={-1}
-          onClick={() => onReplay?.()}
-          onKeyDown={onKeyDown}
-        >
-          <circle className="replay-ring" cx={2772} cy={1065} r={54} fill="rgba(0,0,0,0.01)" stroke="#fff" strokeWidth={2} data-name="Ellipse 1" />
-          <image href="/electric-grid/ui/layer-47.png" x={2752} y={1034} width={58} height={60} data-name="Layer 47" />
+        {/* Row above the panel (replaces the old round replay icon): teal replay pill and dark-red quit pill. */}
+        <g className="panel-button replay-button" role="button" aria-label="Replay" aria-hidden="true" tabIndex={-1} onClick={() => onReplay?.()} onKeyDown={onKeyDown(onReplay)}>
+          <rect className="button-hit" x={2289} y={859} width={282} height={115} rx={57} />
+          <image href="/electric-grid/ui/button-left.png" x={2297} y={867} width={266} height={99} data-name="button left" />
+          <image href="/electric-grid/ui/replay-exit-replay-text.png" x={2360} y={896} width={145} height={44} data-name="replay text" />
+        </g>
+        <g className="panel-button quit-button" role="button" aria-label="Quit" aria-hidden="true" tabIndex={-1} onClick={() => onQuit?.()} onKeyDown={onKeyDown(onQuit)}>
+          <rect className="button-hit" x={2578} y={859} width={278} height={115} rx={57} />
+          <image href="/electric-grid/ui/button-right.png" x={2586} y={867} width={262} height={99} data-name="button right" />
+          <image href="/electric-grid/ui/replay-exit-quit-text.png" x={2673} y={896} width={89} height={43} data-name="quit text" />
         </g>
       </svg>
     </>
