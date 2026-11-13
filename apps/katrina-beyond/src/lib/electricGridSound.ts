@@ -15,6 +15,28 @@ export function unlockAudio() {
 
 export function setMuted(value: boolean) {
   muted = value;
+  if (music) music.muted = value;
+}
+
+const MUSIC_VOLUME = 0.25;
+let music: HTMLAudioElement | null = null;
+
+/** Loops the gameplay score at half volume. Call from a user gesture's aftermath (browsers block autoplay before one). */
+export function startMusic() {
+  if (typeof Audio === "undefined") return;
+  if (!music) {
+    music = new Audio("/electric-grid/looping-audio.mp3");
+    music.loop = true;
+    music.volume = MUSIC_VOLUME;
+    music.muted = muted;
+  }
+  if (music.paused) void music.play().catch(() => {});
+}
+
+export function stopMusic() {
+  if (!music) return;
+  music.pause();
+  music.currentTime = 0;
 }
 
 export function tone(freq: number, ms = 250, type: OscillatorType = "sine") {

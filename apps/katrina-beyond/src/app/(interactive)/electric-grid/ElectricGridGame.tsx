@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FACILITIES, FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, finalJingle, levelJingle, playStorm, popTick, preloadStorm, simonChime, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
+import { buzz, finalJingle, levelJingle, playStorm, popTick, preloadStorm, simonChime, startMusic, stopMusic, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
@@ -128,6 +128,13 @@ export default function ElectricGridGame({
       token.current++;
     };
   }, []);
+
+  // The score loops only during gameplay, not on the begin/choose/intro/outro screens.
+  useEffect(() => {
+    if (phase === "briefing" || phase === "watch" || phase === "play" || phase === "levelDone") startMusic();
+    else stopMusic();
+  }, [phase]);
+  useEffect(() => stopMusic, []);
 
   const go = (next: Phase) => {
     live.current.phase = next;
