@@ -68,8 +68,14 @@ export type ElectricGridMapHandle = {
   throb: (ids: string[], iterations?: number | "infinite") => void;
   /** Plays a radar-blip pulse over the given facilities. */
   pulse: (ids: string[], color?: string) => void;
-  /** Draws persistent rings on facilities. "hint" marks the expected one, "select" marks what a loop currently encloses. */
-  setRings: (kind: "hint" | "select", ids: string[]) => void;
+  /** Draws persistent rings on facilities. "hint" marks the expected one, "select" marks what a loop currently encloses. `color` overrides the ring's usual stroke. */
+  setRings: (kind: "hint" | "select", ids: string[], color?: string) => void;
+  /**
+   * Draws a dotted guide path through the given facilities in order (the same look as the connect path), building up
+   * over `drawMs`, holding for `holdMs`, then fading off. `onReach` fires as the drawing reaches each facility.
+   * A new call, reset or hideFacilities replaces / clears it.
+   */
+  showGuidePath: (ids: string[], drawMs: number, holdMs: number, onReach?: (index: number) => void) => void;
   /** Draws (or with null clears) the dashed gesture path. */
   setPath: (points: MapPoint[] | null) => void;
   /** Converts client (screen) coordinates to map units. */
@@ -107,6 +113,7 @@ const CSS = [
   ".electric-grid-map .zone-labels image { opacity: 0; }",
   ".electric-grid-map .transmission-lines { opacity: 0; }",
   ".electric-grid-map .transmission-lines g { opacity: 0; }",
+  ".electric-grid-map .transmission-lines .dots { animation: eg-march 1s linear infinite; }",
   ".electric-grid-map use.icon-grow { transform-box: view-box; transform-origin: var(--throb-origin, 0 0); animation: eg-icon-grow 700ms cubic-bezier(0.2, 1.3, 0.4, 1) backwards; }",
   ".electric-grid-map use.icon-throb { transform-box: view-box; transform-origin: var(--throb-origin, 0 0); animation: eg-icon-throb var(--throb-dur, 0.8s) ease-in-out var(--throb-delay, 0s) var(--throb-count, 2); }",
   ".electric-grid-map .zones rect { fill: var(--zone-color, #1e00fc); }",
@@ -114,11 +121,12 @@ const CSS = [
   ".electric-grid-map .static-ring { fill: none; stroke-width: 7; }",
   ".electric-grid-map .static-ring.hint { stroke: #fbbf24; animation: eg-throb 0.8s ease-in-out infinite alternate; }",
   ".electric-grid-map .static-ring.select { stroke: #67e8f9; }",
+  "@keyframes eg-march { to { stroke-dashoffset: -22; } }", // one dash period (4 + 18), so the dots march along the line
   "@keyframes eg-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }",
   "@keyframes eg-throb { from { opacity: 0.4; } to { opacity: 1; } }",
   "@keyframes eg-icon-grow { from { transform: scale(0); } to { transform: scale(1); } }",
   "@keyframes eg-icon-throb { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.75); } }",
-  "@media (prefers-reduced-motion: reduce) { .electric-grid-map use.icon-throb, .electric-grid-map use.icon-grow { animation: none; } }",
+  "@media (prefers-reduced-motion: reduce) { .electric-grid-map use.icon-throb, .electric-grid-map use.icon-grow, .electric-grid-map .transmission-lines .dots { animation: none; } }",
 ].join(" ");
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -137,6 +145,8 @@ const TRANSMISSION_DIM_MS = 1500;
 const FLOW_SNAP = 60;
 /** Delay between flows fading in when only some are shown. */
 const FLOW_STAGGER_MS = 150;
+/** How long the guide path takes to fade off once its hold is over. */
+const GUIDE_FADE_MS = 900;
 
 /** Zone name labels exported from the PSD (x/y/size in map units; zone is the zone each one names). English Turn, Waggerman and Kenner sit off the canvas, so they are left out. */
 const ZONE_LABELS = [
@@ -228,6 +238,20 @@ export default function ElectricGridMap({
     if (color) ring.setAttribute("stroke", color);
     parent.appendChild(ring);
     return ring;
+  };
+
+  const guideRaf = useRef(0);
+  const guideTimer = useRef<number | undefined>(undefined);
+
+  /** Cancels the guide path and clears it. */
+  const clearGuide = () => {
+    cancelAnimationFrame(guideRaf.current);
+    window.clearTimeout(guideTimer.current);
+    const g = ringGroup("guide");
+    if (!g) return;
+    g.style.transition = "none";
+    g.style.removeProperty("opacity");
+    g.querySelectorAll("path").forEach((p) => p.removeAttribute("d"));
   };
 
   const flows = useRef<Flow[] | null>(null);
@@ -340,6 +364,7 @@ export default function ElectricGridMap({
       ringGroup("static-rings")?.replaceChildren();
       ringGroup("pulses")?.replaceChildren();
       ringGroup("path")?.querySelectorAll("path").forEach((p) => p.removeAttribute("d"));
+      clearGuide();
       radar.current?.clear();
     },
     hideZones,
@@ -373,6 +398,7 @@ export default function ElectricGridMap({
         dots.setAttribute("stroke", "#fff");
         dots.setAttribute("stroke-width", "8");
         dots.setAttribute("stroke-dasharray", "4 18");
+        dots.setAttribute("class", "dots"); // marches along the line (eg-march), also once the layer has dimmed
         line.append(under, dots);
         line.style.transition = transition ? `opacity ${FADE_MS}ms ease ${i * TRANSMISSION_STAGGER_MS}ms` : "none";
         g.appendChild(line);
@@ -506,6 +532,7 @@ export default function ElectricGridMap({
       ringGroup("static-rings")?.replaceChildren();
       ringGroup("pulses")?.replaceChildren();
       ringGroup("path")?.querySelectorAll("path").forEach((p) => p.removeAttribute("d"));
+      clearGuide();
     },
     pulse(ids, color = "#fbbf24") {
       const group = ringGroup("pulses");
@@ -515,11 +542,43 @@ export default function ElectricGridMap({
         ring?.addEventListener("animationend", () => ring.remove(), { once: true });
       });
     },
-    setRings(kind, ids) {
+    setRings(kind, ids, color) {
       const group = ringGroup("static-rings");
       if (!group) return;
       group.querySelectorAll(`.${kind}`).forEach((el) => el.remove());
-      ids.forEach((id) => addRing(group, id, `static-ring ${kind}`));
+      ids.forEach((id) => {
+        const ring = addRing(group, id, `static-ring ${kind}`);
+        if (color && ring) ring.style.stroke = color; // inline, to beat the kind's CSS stroke
+      });
+    },
+    showGuidePath(ids, drawMs, holdMs, onReach) {
+      clearGuide();
+      const g = ringGroup("guide");
+      const pts = ids.map((id) => FACILITY_BY_ID[id]).filter(Boolean);
+      if (!g || pts.length < 2) return;
+      // Cumulative length at each facility, so the line can be cut off part way along the polyline.
+      const at = [0];
+      for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      const total = at[at.length - 1];
+      const start = performance.now();
+      let reached = 0;
+      const draw = (now: number) => {
+        const len = Math.min(1, (now - start) / drawMs) * total;
+        const seg = Math.max(1, at.findIndex((a) => a >= len));
+        const f = (len - at[seg - 1]) / (at[seg] - at[seg - 1] || 1);
+        const tip = { x: pts[seg - 1].x + (pts[seg].x - pts[seg - 1].x) * f, y: pts[seg - 1].y + (pts[seg].y - pts[seg - 1].y) * f };
+        const d = `M${[...pts.slice(0, seg), tip].map((p) => `${Math.round(p.x)} ${Math.round(p.y)}`).join("L")}`;
+        g.querySelectorAll("path").forEach((p) => p.setAttribute("d", d));
+        while (reached < pts.length && at[reached] <= len) onReach?.(reached++);
+        if (len < total) guideRaf.current = requestAnimationFrame(draw);
+        else
+          guideTimer.current = window.setTimeout(() => {
+            g.style.transition = `opacity ${GUIDE_FADE_MS}ms ease`;
+            g.style.opacity = "0";
+            guideTimer.current = window.setTimeout(clearGuide, GUIDE_FADE_MS);
+          }, holdMs);
+      };
+      guideRaf.current = requestAnimationFrame(draw);
     },
     setPath(points) {
       const d = points && points.length > 1 ? `M${points.map((p) => `${Math.round(p.x)} ${Math.round(p.y)}`).join("L")}` : "";
@@ -868,6 +927,10 @@ export default function ElectricGridMap({
         <g className="overlay" pointerEvents="none">
           <g className="static-rings" />
           <g className="pulses" />
+          <g className="guide">
+            <path fill="none" stroke="#000" strokeOpacity={0.55} strokeWidth={14} strokeLinecap="round" strokeLinejoin="round" />
+            <path fill="none" stroke="#fff" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 18" />
+          </g>
           <g className="path">
             <path fill="none" stroke="#000" strokeOpacity={0.55} strokeWidth={14} strokeLinecap="round" strokeLinejoin="round" />
             <path fill="none" stroke="#fff" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 18" />

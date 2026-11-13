@@ -43,3 +43,7 @@ next-env.d.ts
 # formats never committed
 *.psd
 *.mp4
+
+# temp md files
+UPDATE.md
+UPDATE-*.md

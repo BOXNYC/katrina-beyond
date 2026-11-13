@@ -206,5 +206,15 @@ export function popTick(index = 0, total = 1) {
   tone(420 + k * 900, 110, "sine");
 }
 
+/** Simon-style chime notes, one per color (blue, green, red, yellow): a major-triad-ish set so any order sounds pleasant yet each color is distinct. */
+export const SIMON_NOTES = [329.63, 392, 523.25, 659.25];
+
+/** Bell-like chime for one Simon color (index into SIMON_NOTES, wraps): a clear sine with a soft octave overtone and a longer ring. */
+export function simonChime(index: number) {
+  const f = SIMON_NOTES[index % SIMON_NOTES.length];
+  note(f, 0, 0.7, "sine", 0.2);
+  note(f * 2, 0, 0.35, "sine", 0.06);
+}
+
 export const buzz =() => tone(110, 350, "sawtooth");
 export const cheer = () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 180), i * 120));

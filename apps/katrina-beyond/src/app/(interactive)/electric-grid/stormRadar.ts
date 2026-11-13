@@ -8,7 +8,7 @@ const VERT = `attribute vec2 a; varying vec2 vUv; void main() { vUv = a * 0.5 + 
 /**
  * Weather-service Doppler look: each zone is a soft-edged storm cell; evolving domain-warped noise is added to
  * its intensity and the result is quantized onto reflectivity bands (cyan, greens, yellow, orange, red, magenta, white).
- * The whole system drifts west -> east like a radar loop.
+ * The whole system drifts east -> west like a radar loop.
  */
 const FRAG = `
 precision highp float;
@@ -48,8 +48,8 @@ vec3 band(float v, out float alpha) {
 
 void main() {
   vec2 p = vec2(vUv.x * ${MAP_W}.0, (1.0 - vUv.y) * ${MAP_H}.0);
-  // The system tracks west -> east, a touch north (map y points down). The cells creep along it...
-  vec2 wind = normalize(vec2(1.0, -0.25));
+  // The system tracks east -> west, a touch north (map y points down). The cells creep along it...
+  vec2 wind = normalize(vec2(-1.0, -0.25));
   float t = uTime - 4.0; // centered so cells sit over their zones mid-storm
   vec2 cellShift = wind * 26.0 * t;
   float env = 0.0;

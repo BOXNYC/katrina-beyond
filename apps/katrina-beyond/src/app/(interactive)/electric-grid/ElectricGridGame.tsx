@@ -2,12 +2,11 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { FACILITIES, FACILITY_BY_ID, type Facility } from "@/lib/electricGridFacilities";
-import { buzz, finalJingle, levelJingle, playStorm, popTick, preloadStorm, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
+import { buzz, finalJingle, levelJingle, playStorm, popTick, preloadStorm, simonChime, stopStorm, tone, unlockAudio, zoneTick } from "@/lib/electricGridSound";
 import {
   COPY,
   LEVEL_INFO,
   STORMS,
-  explainMistake,
   pointInPolygon,
   stormZones,
   transmissionChains,
@@ -24,8 +23,10 @@ type Phase = "begin" | "choose" | "intro" | "briefing" | "watch" | "play" | "lev
 
 /** How close (map units) a touch must land to a facility to count as on it. */
 const HIT_RADIUS = 64;
-const OUTAGE_COLOR = "#f87171";
 const RESTORED_COLOR = "#4ade80";
+/** Simon-style colors for the sequence, by step (blue, green, red, yellow, repeating); each has its own chime (simonChime, same index). */
+const SIMON_COLORS = ["#3b82f6", "#22c55e", "#ef4444", "#facc15"];
+const simonColor = (step: number) => SIMON_COLORS[step % SIMON_COLORS.length];
 /**
  * The level whose completion reveals the water exit paths. Assumption: "on the 3rd level the water exits
  * is displayed" means shown as that level's completion reward. Only flows whose water icons are all on the map
@@ -59,8 +60,24 @@ const INTRO_MESSAGE_MS = 5000;
 /** How long the transmission-line payoff (level 2) plays, so its chains (TRANSMISSION_STAGGER_MS apart) can be seen. */
 const TRANSMISSION_DONE_MS = 4500;
 
-/** Level intro beats: spotlight fade, and pauses after each typed panel so it can be read. */
-const SPOT_FADE_MS = 1200; // matches the spotlight box transition (duration-[1200ms])
+/** Level 2 guide path: how long it takes to draw through the stations, and how long it holds before fading off. */
+const GUIDE_DRAW_MS = 2600;
+const GUIDE_HOLD_MS = 700;
+const GUIDE_FADE_MS = 900; // matches GUIDE_FADE_MS in ElectricGridMap.tsx
+
+/** Fade to black after the game is done, then back in to the begin page; and the final card waits this long for a tap before fading by itself. */
+const FADE_MS = 1500;
+const OUTRO_CARD_MS = 20_000;
+/** Begin page quiet time before the storm screensaver starts (a minute after returning from a finished game), how long each storm shows, and the pause before the next. */
+const BEGIN_IDLE_MS = 45_000;
+const BEGIN_IDLE_AFTER_DONE_MS = 60_000;
+const SAVER_FADE_MS = 2500;
+const SAVER_HOLD_MS = 12_000;
+const SAVER_PAUSE_MS = 4000;
+
+/** Level intro beats: spotlight fade, the slow glide between its two targets, and pauses after each typed panel so it can be read. */
+const SPOT_FADE_MS = 1200; // matches the spotlight opacity transition
+const SPOT_MOVE_MS = 3600; // matches the spotlight left/top/width transition when it moves while on
 const READ_PAUSE_MS = 700;
 
 /** Spotlight targets: a circle centered on the level message / instruction panel (cx, cy in % of the map), diameter in % of the map width. Much larger than the target so the text never clips. */
@@ -99,9 +116,11 @@ export default function ElectricGridGame({
   const [storm, setStorm] = useState<Storm>(STORMS[0]);
   const [card, setCard] = useState(false);
   const [aftermath, setAftermath] = useState(false); // the centered "up to you" message after the storm
-  // Spotlight: the box keeps its last target while it fades out (`on` false).
-  const [spotState, setSpotState] = useState<{ target: Spot; on: boolean }>({ target: "message", on: false });
-  const setSpot = (target: Spot | null) => setSpotState((p) => ({ target: target ?? p.target, on: target !== null }));
+  const [fading, setFading] = useState(false); // black overlay: fading out after the game, and back in on the begin page
+  const beginIdleMs = useRef(BEGIN_IDLE_MS);
+  // Spotlight: the box keeps its last target while it fades out (`on` false). `jump` places it at its new target unseen (it was off), instead of gliding there.
+  const [spotState, setSpotState] = useState<{ target: Spot; on: boolean; jump: boolean }>({ target: "message", on: false, jump: true });
+  const setSpot = (target: Spot | null) => setSpotState((p) => ({ target: target ?? p.target, on: target !== null, jump: !p.on }));
 
   useEffect(() => {
     const token = run;
@@ -135,20 +154,87 @@ export default function ElectricGridGame({
     setSpot(null);
     setCard(false);
     setAftermath(false);
+    setFading(false);
+    beginIdleMs.current = BEGIN_IDLE_MS;
     go("begin");
   };
 
-  // Only watch for inactivity during real play (levels) and on the final completion card, not the begin/choose screens or the intro / storm / outro animations (those are long and hands-off). The timer restarts each time it becomes active.
-  const idleActive = phase === "briefing" || phase === "watch" || phase === "play" || phase === "levelDone" || (phase === "outro" && card);
+  /** After the game: fades to black, then back in to the begin page (whose idle wait is then a minute). */
+  const finish = async () => {
+    if (live.current.phase !== "outro") return;
+    const token = run.current;
+    setFading(true);
+    if (!(await wait(FADE_MS, token))) return;
+    reset();
+    beginIdleMs.current = BEGIN_IDLE_AFTER_DONE_MS;
+  };
+
+  // The final card fades out on its own if nobody taps Exit.
+  useEffect(() => {
+    if (phase !== "outro" || !card) return;
+    const t = window.setTimeout(() => void finish(), OUTRO_CARD_MS);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, card]);
+
+  // Begin page screensaver: after a quiet spell a random storm's Doppler radar plays over the map, one after another, until someone touches the screen.
+  useEffect(() => {
+    if (phase !== "begin") return;
+    const m = map.current;
+    let timer: number | undefined;
+    let showing = false;
+    const play = () => {
+      const zones = stormZones(STORMS[Math.floor(Math.random() * STORMS.length)]);
+      showing = true;
+      m?.showStorm(zones, SAVER_FADE_MS);
+      timer = window.setTimeout(() => {
+        m?.hideStorm(SAVER_FADE_MS);
+        showing = false;
+        timer = window.setTimeout(play, SAVER_FADE_MS + SAVER_PAUSE_MS);
+      }, SAVER_FADE_MS + SAVER_HOLD_MS);
+    };
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(play, beginIdleMs.current);
+    };
+    const activity = () => {
+      if (showing) m?.hideStorm(600);
+      showing = false;
+      arm();
+    };
+    const events = ["pointerdown", "pointermove", "keydown"] as const;
+    events.forEach((e) => window.addEventListener(e, activity, { passive: true }));
+    arm();
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, activity));
+      if (showing) m?.hideStorm(600);
+    };
+  }, [phase]);
+
+  // Only watch for inactivity during real play (levels), not the begin/choose screens, the intro / storm / outro animations (those are long and hands-off) or the final card (that fades out by itself). The timer restarts each time it becomes active.
+  const idleActive = phase === "briefing" || phase === "watch" || phase === "play" || phase === "levelDone";
   const idle = useIdlePrompt({ active: idleActive, timeoutMs: idleTimeoutMs, countdownMs: idleCountdownMs, onReset: reset });
 
-  /** Pulses each remaining outage step in order, with a blip of sound. When `lose` is set the facilities also go grey. */
+  /**
+   * Pulses each remaining outage step in order, in its Simon color with that color's chime. When `lose` is set the
+   * facilities also go grey. The connect level instead draws a path through the remaining stations in order, which then fades off.
+   */
   const playOutages = async (n: LevelNumber, token: number, lose: boolean) => {
     const steps = live.current.storm.levels[n];
-    for (let i = lose ? 0 : live.current.progress; i < steps.length; i++) {
+    const from = lose ? 0 : live.current.progress;
+    if (LEVEL_INFO[n].interaction === "connect" && steps.length - from > 1) {
+      const ids = steps.slice(from).map((st) => st.facilityIds[0]);
+      map.current?.showGuidePath(ids, GUIDE_DRAW_MS, GUIDE_HOLD_MS, (i) => {
+        map.current?.pulse([ids[i]], simonColor(from + i));
+        simonChime(from + i);
+      });
+      return wait(GUIDE_DRAW_MS + GUIDE_HOLD_MS + GUIDE_FADE_MS + 400, token);
+    }
+    for (let i = from; i < steps.length; i++) {
       const ids = steps[i].facilityIds;
-      map.current?.pulse(ids, OUTAGE_COLOR);
-      tone(260 + i * 70, 220, "triangle");
+      map.current?.pulse(ids, simonColor(i));
+      simonChime(i);
       if (lose) map.current?.setFacilities(ids, "outage", true);
       if (!(await wait(ids.length > 1 ? 1500 : 1100, token))) return false;
     }
@@ -174,7 +260,8 @@ export default function ElectricGridGame({
     if (n > 1) {
       map.current?.hideFacilities(true);
       map.current?.setFacilities(ids, "ok", true);
-      map.current?.setFacilities(l.storm.levels[n].flatMap((st) => st.facilityIds), "outage", true);
+      // The connect level keeps its stations powered: power was just restored, so it isn't shown off again (a guide path shows the order instead).
+      if (LEVEL_INFO[n].interaction !== "connect") map.current?.setFacilities(l.storm.levels[n].flatMap((st) => st.facilityIds), "outage", true);
     }
     // 1. The level description types out under a spotlight.
     setSpot("message");
@@ -183,7 +270,7 @@ export default function ElectricGridGame({
     if (!(await wait(READ_PAUSE_MS, token))) return;
     // 2. The spotlight moves to the instructions, which appear and type out.
     setSpot("instruction");
-    if (!(await wait(SPOT_FADE_MS, token))) return;
+    if (!(await wait(SPOT_MOVE_MS, token))) return;
     await map.current?.instruction.showInstruction(info.instruction);
     if (!(await wait(READ_PAUSE_MS, token))) return;
     // 3. The spotlight lifts and the icon sequence plays.
@@ -192,7 +279,7 @@ export default function ElectricGridGame({
     go("watch");
     map.current?.instruction.showReplay();
     if (!(await wait(1600, token))) return;
-    if (!(await playOutages(n, token, false))) return; // the out icons stay out; the order just blips, as with replay
+    if (!(await playOutages(n, token, false))) return; // the out icons stay out; the order just blips (or, for connect, a path is drawn), as with replay
     go("play");
   };
 
@@ -298,7 +385,6 @@ export default function ElectricGridGame({
     if (live.current.phase !== "play") return;
     const token = run.current;
     clearFeedback();
-    map.current?.instruction.hideMessage();
     go("watch");
     if (await playOutages(live.current.level, token, false)) go("play");
   };
@@ -318,10 +404,10 @@ export default function ElectricGridGame({
     map.current?.setRings("hint", []);
   };
 
-  const wrong = (message: string) => {
+  /** A wrong move: the buzz, then the next correct move is ringed in its Simon color. */
+  const wrong = () => {
     buzz();
-    map.current?.setRings("hint", expectedIds());
-    map.current?.instruction.showMessage(message);
+    map.current?.setRings("hint", expectedIds(), simonColor(live.current.progress));
   };
 
   const afterSubmit = () => {
@@ -331,7 +417,7 @@ export default function ElectricGridGame({
 
   const submitTap = (id: string) => {
     if (expectedIds()[0] === id) restoreStep();
-    else return wrong(explainMistake("tap", live.current.progress + 1));
+    else return wrong();
     afterSubmit();
   };
 
@@ -341,16 +427,16 @@ export default function ElectricGridGame({
     let k = 0;
     while (k < chain.length && chain[k] === remaining[k]) k++;
     for (let i = 0; i < k; i++) restoreStep(i);
-    if (k < chain.length) return wrong(explainMistake("connect", l.progress + 1));
+    if (k < chain.length) return wrong();
     afterSubmit();
   };
 
   const submitGroup = (ids: string[]) => {
     if (!ids.length) return;
-    if (ids.length > 4) return wrong(COPY.tooMany);
+    if (ids.length > 4) return wrong();
     const want = expectedIds();
     if (ids.length === want.length && want.every((id) => ids.includes(id))) restoreStep();
-    else return wrong(explainMistake("circle", live.current.progress + 1));
+    else return wrong();
     afterSubmit();
   };
 
@@ -372,7 +458,6 @@ export default function ElectricGridGame({
 
   const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (live.current.phase !== "play" || gesture.current) return;
-    map.current?.instruction.hideMessage(); // the mistake message gives way to the instruction on the next input
     const p = mapPoint(e);
     if (!p) return;
     const { interaction } = LEVEL_INFO[live.current.level];
@@ -457,7 +542,9 @@ export default function ElectricGridGame({
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-[opacity,left,top,width] duration-[1200ms] ease-in-out motion-reduce:transition-none"
+          className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full transition-[opacity,left,top,width] ease-in-out motion-reduce:transition-none ${
+            spotState.jump ? "[transition-duration:1200ms,0ms,0ms,0ms]" : "[transition-duration:1200ms,3600ms,3600ms,3600ms]"
+          }`}
           style={{
             left: `${SPOTLIGHTS[spotState.target].cx}%`,
             top: `${SPOTLIGHTS[spotState.target].cy}%`,
@@ -497,11 +584,16 @@ export default function ElectricGridGame({
           <Card>
             <h2 className="text-6xl font-semibold text-green-400">{COPY.outroTitle}</h2>
             <p className="max-w-2xl text-2xl text-slate-200">{COPY.outroBody}</p>
-            <button onClick={reset} className="h-16 rounded-full bg-amber-400 px-12 text-2xl font-semibold text-slate-950 hover:bg-amber-300">
+            <button onClick={() => void finish()} className="h-16 rounded-full bg-amber-400 px-12 text-2xl font-semibold text-slate-950 hover:bg-amber-300">
               {COPY.exit}
             </button>
           </Card>
         )}
+
+        <div
+          aria-hidden="true"
+          className={`absolute inset-0 bg-black transition-opacity duration-[1500ms] ease-in-out motion-reduce:transition-none ${fading ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        />
       </div>
 
       {idle.prompting && <AreYouStillThere secondsLeft={idle.secondsLeft} onStay={idle.stay} />}
