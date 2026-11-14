@@ -88,7 +88,7 @@ const SPOTLIGHTS = {
 type Spot = keyof typeof SPOTLIGHTS;
 
 type Gesture =
-  | { kind: "connect"; pointerId: number; chain: string[] }
+  | { kind: "connect"; pointerId: number; chain: string[]; prefix: MapPoint[] }
   | { kind: "circle"; pointerId: number; points: MapPoint[]; enclosed: string[] };
 
 export default function ElectricGridGame({
@@ -419,7 +419,10 @@ export default function ElectricGridGame({
 
   const afterSubmit = () => {
     const l = live.current;
-    if (l.progress >= l.storm.levels[l.level].length) void finishLevel();
+    if (l.progress >= l.storm.levels[l.level].length) {
+      map.current?.setPath(null);
+      void finishLevel();
+    }
   };
 
   const submitTap = (id: string) => {
@@ -428,9 +431,24 @@ export default function ElectricGridGame({
     afterSubmit();
   };
 
+  /** The station the player's connected chain currently ends on (the last one restored), or undefined before the first. */
+  const chainEnd = () => {
+    const l = live.current;
+    return l.progress > 0 ? l.storm.levels[l.level][l.progress - 1].facilityIds[0] : undefined;
+  };
+
+  /** The connected chain so far (restored stations in order), kept drawn between gestures on the connect level. */
+  const chainPoints = () => {
+    const l = live.current;
+    return l.storm.levels[l.level].slice(0, l.progress).map((st) => FACILITY_BY_ID[st.facilityIds[0]]);
+  };
+
   const submitChain = (chain: string[]) => {
     const l = live.current;
     const remaining = l.storm.levels[l.level].slice(l.progress).map((st) => st.facilityIds[0]);
+    // A chain continued from the last restored station starts on it; that station is already done.
+    if (chain[0] === chainEnd()) chain = chain.slice(1);
+    if (!chain.length) return;
     let k = 0;
     while (k < chain.length && chain[k] === remaining[k]) k++;
     for (let i = 0; i < k; i++) restoreStep(i);
@@ -474,11 +492,13 @@ export default function ElectricGridGame({
       return;
     }
     if (interaction === "connect") {
-      const f = nearest(p);
-      if (!f) return;
+      // Pressing the chain's current end (already restored) continues the chain from there, across gestures.
+      const end = chainEnd();
+      const f = nearest(p) ?? (end ? nearest(p, false) : null);
+      if (!f || (live.current.restored.has(f.id) && f.id !== end)) return;
       tone(440, 90);
-      gesture.current = { kind: "connect", pointerId: e.pointerId, chain: [f.id] };
-      map.current?.setPath([f, p]);
+      gesture.current = { kind: "connect", pointerId: e.pointerId, chain: [f.id], prefix: f.id === end ? chainPoints().slice(0, -1) : [] };
+      map.current?.setPath([...gesture.current.prefix, f, p]);
     } else {
       gesture.current = { kind: "circle", pointerId: e.pointerId, points: [p], enclosed: [] };
     }
@@ -498,7 +518,7 @@ export default function ElectricGridGame({
         g.chain.push(f.id);
         tone(440 + g.chain.length * 50, 90);
       }
-      map.current?.setPath([...g.chain.map((id) => FACILITY_BY_ID[id]), p]);
+      map.current?.setPath([...g.prefix, ...g.chain.map((id) => FACILITY_BY_ID[id]), p]);
       return;
     }
     const last = g.points[g.points.length - 1];
@@ -520,8 +540,11 @@ export default function ElectricGridGame({
     map.current?.setPath(null);
     map.current?.setRings("select", []);
     if (live.current.phase !== "play") return;
-    if (g.kind === "connect") submitChain(g.chain);
-    else if (g.points.length >= 6) submitGroup(g.enclosed);
+    if (g.kind === "connect") {
+      submitChain(g.chain);
+      // Keep the chain so far drawn between gestures (afterSubmit clears it when the level completes).
+      if (live.current.progress < live.current.storm.levels[live.current.level].length) map.current?.setPath(chainPoints());
+    } else if (g.points.length >= 6) submitGroup(g.enclosed);
   };
 
   return (

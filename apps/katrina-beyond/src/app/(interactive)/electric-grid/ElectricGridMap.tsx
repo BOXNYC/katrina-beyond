@@ -771,8 +771,9 @@ export default function ElectricGridMap({
                 <image href="/electric-grid/layer-45-copy-5.png" x={600} y={463} width={37} height={54} data-name="Layer 45 copy 5" />
                 <image href="/electric-grid/layer-45-copy-6.png" x={366} y={447} width={37} height={54} data-name="Layer 45 copy 6" />
                 <image href="/electric-grid/layer-45-copy-7.png" x={216} y={387} width={45} height={54} data-name="Layer 45 copy 7" />
-                <image href="/electric-grid/layer-45-copy-8.png" x={1342} y={1116} width={45} height={54} data-name="Layer 45 copy 8" />
-                <image href="/electric-grid/layer-45-copy-9.png" x={648} y={1422} width={44} height={53} data-name="Layer 45 copy 9" />
+                <image href="/electric-grid/layer-45-copy-8.png" x={1341} y={1550} width={45} height={54} data-name="Layer 45 copy 8" />
+                <image href="/electric-grid/layer-45-copy-10.png" x={1254} y={1566} width={42} height={55} data-name="Layer 45 copy 10" />
+                <image href="/electric-grid/layer-45-copy-9.png" x={638} y={1589} width={46} height={53} data-name="Layer 45 copy 9" />
                 <image href="/electric-grid/layer-45-copy-3.png" x={1076} y={410} width={36} height={55} data-name="Layer 45 copy 3" />
                 <image href="/electric-grid/layer-45-copy-4.png" x={1496} y={316} width={37} height={54} data-name="Layer 45 copy 4" />
                 <path d="M312.0 1012.0C359.9 952.1 400.6 896.9 360.0 774.0C323.9 664.8 388.1 660.9 385.0 496.0" data-name="Shape 2" />
@@ -783,9 +784,9 @@ export default function ElectricGridMap({
                 <path d="M1120.0 1167.0C1115.8 1033.5 1000.7 995.0 977.0 978.0C965.8 970.0 980.2 963.0 977.0 946.0C973.8 929.1 899.8 904.3 903.0 885.0C916.7 803.3 922.4 702.8 933.0 631.0C936.1 610.3 915.0 594.9 915.0 577.0C915.0 563.8 935.5 560.8 936.0 550.0C937.2 525.1 945.4 454.0 946.0 446.0" data-name="Shape 2 copy 5" />
                 <path d="M1433.0 911.0C1394.2 904.0 1143.3 862.4 1132.0 860.0C1126.5 858.8 1122.9 689.4 1117.0 640.0C1114.6 620.2 1124.0 599.7 1121.0 585.0C1112.6 544.0 1059.7 537.5 1096.0 451.0" data-name="Shape 2 copy 6" />
                 <path d="M1684.0 652.0C1632.9 638.6 1591.9 625.7 1565.0 599.0C1536.8 571.1 1509.9 532.1 1510.0 496.0C1510.1 447.4 1514.1 386.7 1515.0 363.0" data-name="Shape 2 copy 7" />
-                <path d="M1465.0 1425.0C1426.2 1384.1 1339.8 1293.5 1292.0 1249.0C1290.5 1247.6 1330.9 1194.9 1366.0 1145.0" data-name="Shape 2 copy 9" />
-                <path d="M1178.0 1424.0C1191.8 1405.8 1282.0 1268.1 1295.0 1249.0" data-name="Shape 2 copy 10" />
-                <path d="M442.0 1550.0C474.4 1546.9 596.8 1549.5 613.0 1535.0C630.3 1519.5 652.6 1480.1 668.0 1459.0" data-name="Shape 2 copy 8" />
+                <path d="M1289.5 1243.8C1329.2 1284.0 1417.5 1372.7 1466.2 1416.2C1467.7 1417.5 1391.0 1529.4 1357.0 1580.0" data-name="Shape 2 copy 9" />
+                <path d="M1183.7 1420.7C1193.7 1441.3 1275.4 1584.2 1286.5 1604.4" data-name="Shape 2 copy 10" />
+                <path d="M439.2 1548.6C471.6 1549.4 593.3 1538.0 610.5 1551.3C628.9 1565.5 653.9 1603.3 670.8 1623.2" data-name="Shape 2 copy 8" />
               </g>
               <g className="icons">
                 <g className="nola-group">
