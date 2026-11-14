@@ -18,7 +18,7 @@ export function setMuted(value: boolean) {
   if (music) music.muted = value;
 }
 
-const MUSIC_VOLUME = 0.25;
+const MUSIC_VOLUME = 0.1;
 let music: HTMLAudioElement | null = null;
 
 /** Loops the gameplay score at half volume. Call from a user gesture's aftermath (browsers block autoplay before one). */
