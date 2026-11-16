@@ -75,8 +75,8 @@ Each facility type is used by one level (Levels 4 and 5 use two).
    - **Moves like a real radar loop**: the whole system drifts east to west (slightly north) while it's visible. The cells creep slowly along that heading and the rain texture streams through them faster. Movement is subtle; cells stay over their zones.
    - Intensity = soft cell falloff + slowly drifting, domain-warped noise, quantized onto the color bands.
    - **One cell per outage zone**, each the same size as its zone, with soft, feathered edges. Zones without outages get no storm. Cells are not masked to the zone shapes.
-4. As the storm finishes the **zone labels hide**, then the zones **and their icons pop off in sequence** (`popOffZones`): the reverse of the outro's pop-on order (outer rings first, clockwise), one every `INTRO_POP_MS` with the outro's `zoneTick` sound.
-5. A centered message (`COPY.stormAftermath`: "The storm has knocked out power and utilities and it's up to you to restore services to the region.") shows for `INTRO_MESSAGE_MS`, then level 1 starts.
+4. When the storm has passed it **fades away** (the power is still on while it is overhead), then the affected power stations **go out one by one**. After the message, the **zone labels hide** and the zones **and their icons pop off in sequence** (`popOffZones`): the reverse of the outro's pop-on order (outer rings first, clockwise), one every `INTRO_POP_MS` with the outro's `zoneTick` sound.
+5. A centered message (shown after the outages) (`COPY.stormAftermath`: "The storm has knocked out power and utilities and it's up to you to restore services to the region.") shows for `INTRO_MESSAGE_MS`, then level 1 starts.
 
 ### 4.2 Levels
 

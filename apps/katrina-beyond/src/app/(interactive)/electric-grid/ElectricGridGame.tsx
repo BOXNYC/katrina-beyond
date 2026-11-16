@@ -366,23 +366,25 @@ export default function ElectricGridGame({
     map.current?.showZoneLabels();
     map.current?.setFacilities(power, "ok", true);
     if (!(await wait(INTRO_ESTABLISH_MS, token))) return;
-    // 1. The storm rolls in. 2. The affected power stations go out one by one as it passes over them.
+    // 1. The storm rolls in; the power stays on while it passes. 2. The storm goes away, then the affected power stations go out one by one.
     map.current?.showStorm(zones, INTRO_STORM_MS);
+    if (!(await wait(INTRO_STORM_MS, token))) return;
+    map.current?.hideStorm(1200);
     const out = next.levels[1].flatMap((st) => st.facilityIds); // the ones that lose power, in outage order
+    const outageMs = INTRO_STORM_MS * 0.6;
     out.forEach((id, i) => {
       window.setTimeout(() => {
         if (run.current !== token) return;
         map.current?.setFacilities([id], "outage", true);
         tone(200 + (i % 5) * 40, 160, "triangle");
-      }, INTRO_STORM_MS * 0.25 + (INTRO_STORM_MS * 0.6 * i) / Math.max(1, out.length));
+      }, 600 + (outageMs * i) / Math.max(1, out.length));
     });
-    if (!(await wait(INTRO_STORM_MS, token))) return;
-    // 3. The message shows, centered, over the storm. 4. Then the storm goes away and the labels and zones clear.
+    if (!(await wait(600 + outageMs + 400, token))) return;
+    // 3. The message shows, centered. 4. Then the labels and zones clear.
     setAftermath(true);
     if (!(await wait(INTRO_MESSAGE_MS, token))) return;
     setAftermath(false);
     map.current?.hideZoneLabels(true);
-    map.current?.hideStorm(1200);
     map.current?.popOffZones(zones, INTRO_POP_MS, zoneTick);
     // 5. Level 1 begins right away, with no wait; the zones keep popping off behind its first highlight.
     await startLevel(1, token);
