@@ -30,7 +30,9 @@ export function startMusic() {
     music.volume = MUSIC_VOLUME;
     music.muted = muted;
   }
-  if (music.paused) void music.play().catch(() => {});
+  if (!music.paused) return;
+  music.currentTime = 0; // always start from the beginning, even when resuming from a pause
+  void music.play().catch(() => {});
 }
 
 export function stopMusic() {
