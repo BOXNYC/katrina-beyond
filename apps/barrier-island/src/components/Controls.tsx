@@ -1,20 +1,32 @@
 import { useEffect, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Level, ModifierId } from "../lib/barrierIsland";
-import { colors } from "../theme";
+import { uiImages } from "../lib/uiImages";
+import { STAGE_W } from "./Scene";
 
-// All geometry is in artboard units (see Scene STAGE_W/STAGE_H) times `s`.
-const PILL = { w: 54, h: 104, knob: 50, pad: 4 };
-const DOT = 54;
-const LEVEE_Y = [678, 744, 808]; // centers of the three stops
-const LABEL_FONT = 30;
+// Layout is taken from ux-v1.psd, whose 2752x2064 canvas matches the scene
+// art. Values are canvas pixels; `u` converts them to screen units.
+const CANVAS_W = 2752;
+const LABEL_FONT = 64;
+const LABEL_COLOR = "#48748b";
+const FADE_MS = 180;
 
-const TOGGLES: { id: Exclude<ModifierId, "levee">; label: string; x: number }[] = [
-  { id: "barrierIsland", label: "Barrier\nIsland", x: 364 },
-  { id: "marsh", label: "Marsh\nLandbridge", x: 706 },
-  { id: "ridge", label: "Natural\nRidge", x: 1056 },
+const PILL = { w: 104, h: 200, y: 1324 };
+const TOGGLES: { id: Exclude<ModifierId, "levee">; label: string; x: number; cx: number }[] = [
+  { id: "barrierIsland", label: "Barrier\nIsland", x: 599, cx: 654 },
+  { id: "marsh", label: "Marsh", x: 1102, cx: 1151 },
+  { id: "ridge", label: "Natural\nRidge", x: 1598, cx: 1648 },
 ];
-const LEVEE_X = 1601;
+
+// The levee art is one column of three stops; the knob sits on the chosen one.
+const LEVEE = { x: 2132, y: 1248, w: 105, h: 351, cx: 2184 };
+/** Vertical extent of each stop in the column, top (High) to bottom (None). */
+const LEVEE_STOPS = [
+  { level: 2 as Level, name: "High", y: 1248, h: 108 },
+  { level: 1 as Level, name: "Medium", y: 1371, h: 104 },
+  { level: 0 as Level, name: "None", y: 1493, h: 105 },
+];
+const LEVEE_ART = [uiImages.leveeLow, uiImages.leveeMedium, uiImages.leveeHigh];
 
 type Props = {
   s: number;
@@ -24,161 +36,96 @@ type Props = {
 };
 
 export default function Controls({ s, levels, disabled, onChange }: Props) {
+  const u = (STAGE_W / CANVAS_W) * s;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={disabled ? "none" : "box-none"}>
-      {TOGGLES.map((t) => (
-        <PillToggle
-          key={t.id}
-          s={s}
-          x={t.x}
-          label={t.label}
-          on={levels[t.id] === 2}
-          onToggle={() => onChange(t.id, levels[t.id] === 2 ? 0 : 2)}
+      {TOGGLES.map((t) => {
+        const on = levels[t.id] === 2;
+        return (
+          <View key={t.id}>
+            <Pressable
+              onPress={() => onChange(t.id, on ? 0 : 2)}
+              accessibilityRole="switch"
+              accessibilityLabel={t.label.replace("\n", " ")}
+              accessibilityState={{ checked: on }}
+              hitSlop={40 * u}
+              style={{ position: "absolute", left: t.x * u, top: PILL.y * u, width: PILL.w * u, height: PILL.h * u }}
+            >
+              <StateImage sources={[uiImages.ovalDown, uiImages.ovalUp]} index={on ? 1 : 0} />
+            </Pressable>
+            <Label u={u} cx={t.cx} text={t.label} />
+          </View>
+        );
+      })}
+
+      <View style={{ position: "absolute", left: LEVEE.x * u, top: LEVEE.y * u, width: LEVEE.w * u, height: LEVEE.h * u }}>
+        <StateImage sources={LEVEE_ART} index={levels.levee} />
+      </View>
+      {LEVEE_STOPS.map((st) => (
+        <Pressable
+          key={st.level}
+          onPress={() => onChange("levee", st.level)}
+          accessibilityRole="radio"
+          accessibilityLabel={`Levee ${st.name}`}
+          accessibilityState={{ selected: levels.levee === st.level }}
+          hitSlop={8 * u}
+          style={{ position: "absolute", left: LEVEE.x * u, top: st.y * u, width: LEVEE.w * u, height: st.h * u }}
         />
       ))}
-      <LeveeStops s={s} value={levels.levee} onChange={(l) => onChange("levee", l)} />
+      <Label u={u} cx={LEVEE.cx} text="Levee" />
     </View>
   );
 }
 
-function Knob({ size, s }: { size: number; s: number }) {
-  return (
-    <View
-      style={{
-        width: size * s,
-        height: size * s,
-        borderRadius: size * s,
-        backgroundColor: "#fff",
-        borderWidth: Math.max(2, 4 * s),
-        borderColor: colors.controlRing,
-      }}
-    />
-  );
-}
-
-function PillToggle({
-  s,
-  x,
-  label,
-  on,
-  onToggle,
-}: {
-  s: number;
-  x: number;
-  label: string;
-  on: boolean;
-  onToggle: () => void;
-}) {
-  const travel = (PILL.h - PILL.knob - PILL.pad * 2) * s;
-  const [pos] = useState(() => new Animated.Value(on ? 1 : 0));
+/** Stacks same-size images and cross-fades to the one at `index`. */
+function StateImage({ sources, index }: { sources: ImageSourcePropType[]; index: number }) {
+  const [opacities] = useState(() => sources.map((_, i) => new Animated.Value(i === index ? 1 : 0)));
   useEffect(() => {
-    Animated.spring(pos, { toValue: on ? 1 : 0, useNativeDriver: true, bounciness: 6 }).start();
-  }, [on, pos]);
+    Animated.parallel(
+      opacities.map((o, i) =>
+        Animated.timing(o, { toValue: i === index ? 1 : 0, duration: FADE_MS, useNativeDriver: true }),
+      ),
+    ).start();
+  }, [index, opacities]);
 
-  const name = label.replace("\n", " ");
-  return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityLabel={name}
-      accessibilityState={{ checked: on }}
-      hitSlop={24 * s}
-      style={{
-        position: "absolute",
-        left: (x - 120) * s,
-        top: 692 * s,
-        width: 240 * s,
-        alignItems: "center",
-      }}
-    >
-      <View
-        style={{
-          width: PILL.w * s,
-          height: PILL.h * s,
-          borderRadius: PILL.w * s,
-          backgroundColor: colors.control,
-          padding: PILL.pad * s,
-        }}
-      >
-        <Animated.View
-          style={{ transform: [{ translateY: pos.interpolate({ inputRange: [0, 1], outputRange: [travel, 0] }) }] }}
-        >
-          <Knob size={PILL.knob} s={s} />
-        </Animated.View>
-      </View>
-      <Text style={[styles.label, { fontSize: LABEL_FONT * s, lineHeight: 35 * s, marginTop: 22 * s }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function LeveeStops({
-  s,
-  value,
-  onChange,
-}: {
-  s: number;
-  value: Level;
-  onChange: (l: Level) => void;
-}) {
-  const names = ["None", "Medium", "High"];
   return (
     <>
-      {LEVEE_Y.map((cy, i) => {
-        // Top stop is the strongest levee, bottom is none.
-        const level = (2 - i) as Level;
-        return (
-        <Pressable
-          key={i}
-          onPress={() => onChange(level)}
-          accessibilityRole="radio"
-          accessibilityLabel={`Levee ${names[level]}`}
-          accessibilityState={{ selected: value === level }}
-          hitSlop={8 * s}
-          style={{
-            position: "absolute",
-            left: (LEVEE_X - DOT / 2) * s,
-            top: (cy - DOT / 2) * s,
-          }}
-        >
-          {value === level ? (
-            <Knob size={DOT} s={s} />
-          ) : (
-            <View
-              style={{
-                width: DOT * s,
-                height: DOT * s,
-                borderRadius: DOT * s,
-                backgroundColor: colors.control,
-              }}
-            />
-          )}
-        </Pressable>
-        );
-      })}
-      <Text
-        style={[
-          styles.label,
-          {
-            position: "absolute",
-            left: (LEVEE_X - 120) * s,
-            width: 240 * s,
-            top: 850 * s,
-            fontSize: LABEL_FONT * s,
-          },
-        ]}
-      >
-        Levee
-      </Text>
+      {sources.map((src, i) => (
+        <Animated.View key={i} style={[StyleSheet.absoluteFill, { opacity: opacities[i] }]}>
+          <Image source={src} resizeMode="stretch" style={styles.image} accessibilityIgnoresInvertColors />
+        </Animated.View>
+      ))}
     </>
   );
 }
 
+function Label({ u, cx, text }: { u: number; cx: number; text: string }) {
+  const lines = text.split("\n").length;
+  return (
+    <Text
+      style={[
+        styles.label,
+        {
+          left: (cx - 150) * u,
+          width: 300 * u,
+          // Two-line labels start higher so all labels share one centerline.
+          top: (lines === 2 ? 1676 : 1704) * u,
+          fontSize: LABEL_FONT * u,
+          lineHeight: 62 * u,
+        },
+      ]}
+    >
+      {text}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
+  image: { ...StyleSheet.absoluteFill, width: "100%", height: "100%" },
   label: {
-    color: colors.label,
-    fontWeight: "800",
+    position: "absolute",
+    color: LABEL_COLOR,
+    fontWeight: "700",
     textAlign: "center",
   },
 });

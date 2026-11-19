@@ -18,7 +18,9 @@ const { severities } = barrierIsland;
 
 /** The painting as drawn: every defense in place. Shown before play begins. */
 /** Stage units of empty sand at the bottom that can be cropped off. */
-const SAND_CROP = 200;
+const SAND_CROP = 150;
+/** Stage y of the ground line, where the sky ends. */
+const GROUND_Y = 740;
 /** Stage units of height the tallest message (the result screen) needs. */
 const SKY_NEEDS = 440;
 
@@ -59,7 +61,7 @@ export default function BarrierIslandKiosk() {
   const s = width / STAGE_W;
   const stageH = STAGE_H * s;
   const crop = SAND_CROP * s;
-  const horizonY = height + crop - stageH + 560 * s;
+  const horizonY = height + crop - stageH + GROUND_Y * s;
   const skyH = Math.max(horizonY - 24 * s, 0);
   // Type scale: readable on small screens, but never taller than the sky.
   const u = Math.min(Math.max(s, 0.5), skyH / SKY_NEEDS);
@@ -136,7 +138,7 @@ export default function BarrierIslandKiosk() {
       }}
     >
       <View style={{ position: "absolute", left: 0, bottom: -crop, width, height: stageH }}>
-        <Scene levels={controlsShown || phase === "result" ? levels : FULL_DEFENSES} s={s} />
+        <Scene levels={controlsShown || phase === "result" ? levels : FULL_DEFENSES} />
         {controlsShown && (
           <Controls s={s} levels={levels} disabled={phase === "simulating"} onChange={setLevel} />
         )}

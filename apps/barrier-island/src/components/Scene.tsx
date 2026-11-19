@@ -1,72 +1,84 @@
-import { Image, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Animated, Image, StyleSheet, View } from "react-native";
 import { effectiveLevels, type Levels } from "../lib/barrierIsland";
-import { sceneStrips } from "../lib/sceneStrips";
+import { sceneNumber, sceneSource, type SceneNumber } from "../lib/sceneImages";
 
 /** Stage (artboard) size; the controls are laid out in these units too. */
 export const STAGE_W = 2000;
-export const STAGE_H = 1125;
+export const STAGE_H = 1500;
 
-// The painting is shown zoomed in and pushed up so the land sits low on the
-// stage, with room above for the sky and messages.
-const ART_ZOOM = 1.167;
-const ART_X = -7;
-const ART_Y = -163;
-const ART_W = 2000;
-const ART_H = 1125;
+/** Fade-in length for each new scene image. */
+const FADE_MS = 450;
 
-const base = require("../../assets/scene/base.jpg");
-
-type StripKey = keyof typeof sceneStrips;
-
-/** Which "off" strips to lay over the untouched painting for these levels. */
-function activeStrips(levels: Levels): StripKey[] {
+/** The scene image that matches these toggles and levee state. */
+function sceneFor(levels: Levels): SceneNumber {
   const eff = effectiveLevels(levels);
-  const out: StripKey[] = [];
-  if (levels.barrierIsland < 2) out.push("barrier_off");
-  if (eff.marsh < 2) out.push("marsh_off");
-  if (levels.ridge < 2) out.push("ridge_off");
-  if (levels.levee === 0) out.push("levee_none");
-  else if (levels.levee === 1) out.push("levee_medium");
-  return out;
+  return sceneNumber({
+    island: levels.barrierIsland === 2,
+    marsh: eff.marsh === 2,
+    ridge: levels.ridge === 2,
+    levee: levels.levee,
+  });
 }
 
+type Layer = { id: number; n: SceneNumber };
+
 /**
- * The painted cross-section. With every defense at "High" it is the original
- * artwork; weaker settings swap in pre-made versions of just that feature.
+ * The painted cross-section: a single pre-rendered image for each combination
+ * of island, marsh, ridge and levee. The current image is the base; the next
+ * one fades in over it and then becomes the base. Only the base and the
+ * image fading in are mounted (the full set is too large to keep decoded).
  */
-export default function Scene({ levels, s }: { levels: Levels; s: number }) {
-  const px = (v: number) => v * ART_ZOOM * s;
-  const at = (x: number, y: number) => ({
-    left: (ART_X + ART_ZOOM * x) * s,
-    top: (ART_Y + ART_ZOOM * y) * s,
-  });
+export default function Scene({ levels }: { levels: Levels }) {
+  const target = sceneFor(levels);
+  const [layers, setLayers] = useState<Layer[]>([{ id: 0, n: target }]);
+
+  // Stack the new image above the current ones; it fades in over them.
+  if (layers[layers.length - 1].n !== target) {
+    setLayers([...layers, { id: layers[layers.length - 1].id + 1, n: target }]);
+  }
+
+  // Once a layer is fully faded in, everything beneath it can go.
+  const settled = (id: number) => setLayers((ls) => ls.filter((l) => l.id >= id));
 
   return (
     <View style={styles.clip} pointerEvents="none">
+      {layers.map((l) => (
+        <FadeInLayer key={l.id} n={l.n} first={l.id === 0} onDone={() => settled(l.id)} />
+      ))}
+    </View>
+  );
+}
+
+/** Fades in once its image has loaded (the first layer just shows). */
+function FadeInLayer({ n, first, onDone }: { n: SceneNumber; first: boolean; onDone: () => void }) {
+  const [opacity] = useState(() => new Animated.Value(first ? 1 : 0));
+  const [loaded, setLoaded] = useState(first);
+
+  useEffect(() => {
+    if (!loaded) return; // wait for the image so the fade is visible
+    const anim = Animated.timing(opacity, { toValue: 1, duration: FADE_MS, useNativeDriver: true });
+    anim.start(({ finished }) => {
+      if (finished) onDone();
+    });
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, opacity]);
+
+  return (
+    <Animated.View style={[styles.fill, { opacity }]}>
       <Image
-        source={base}
+        source={sceneSource(n)}
         resizeMode="stretch"
-        style={[styles.abs, at(0, 0), { width: px(ART_W), height: px(ART_H) }]}
+        style={styles.fill}
+        onLoad={() => setLoaded(true)}
         accessibilityIgnoresInvertColors
       />
-      {activeStrips(levels).map((key) => {
-        const st = sceneStrips[key];
-        return (
-          <Image
-            key={key}
-            source={st.src}
-            resizeMode="stretch"
-            // A hair of overlap hides rounding seams between strip and painting.
-            style={[styles.abs, at(st.x, st.y), { width: px(st.w) + 0.5, height: px(st.h) + 0.5 }]}
-            accessibilityIgnoresInvertColors
-          />
-        );
-      })}
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   clip: { ...StyleSheet.absoluteFill, overflow: "hidden" },
-  abs: { position: "absolute" },
+  fill: { ...StyleSheet.absoluteFill, width: "100%", height: "100%" },
 });

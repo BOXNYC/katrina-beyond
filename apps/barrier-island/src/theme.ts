@@ -1,5 +1,5 @@
 export const colors = {
-  sky: "#aedcfa",
+  sky: "#aee4fe",
   sand: "#f1ebe0",
   label: "#8c8a86",
   control: "#6b8fb0",
