@@ -10,9 +10,7 @@ const helpAgent = {
   /** Placeholder until the team settles on a local personality (likeness and
    *  legal questions are still open). */
   name: "Help Agent",
-  /** Set to an image path (e.g. a bundled image) to replace the placeholder art. */
-  avatarSrc: undefined as string | undefined,
-  openLabel: "Need a hint?",
+  openLabel: "Need help?",
   nextTipLabel: "Another tip",
   closeLabel: "Got it",
   /** Shown when the player has seen every tip. */

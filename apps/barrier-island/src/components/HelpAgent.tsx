@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import helpAgent from "../lib/helpAgent";
 import { colors } from "../theme";
 
@@ -39,14 +39,14 @@ export default function HelpAgent({ tips }: { tips: string[] }) {
         </View>
       )}
       {open ? (
-        <Avatar />
+        <LifeRing size={64} />
       ) : (
         <Pressable
           onPress={() => setOpen(true)}
           accessibilityRole="button"
           style={styles.opener}
         >
-          <Avatar />
+          <LifeRing size={48} />
           <Text style={styles.openerText}>{helpAgent.openLabel}</Text>
         </Pressable>
       )}
@@ -54,14 +54,26 @@ export default function HelpAgent({ tips }: { tips: string[] }) {
   );
 }
 
-function Avatar() {
-  // Placeholder badge: friendly weather-reporter silhouette.
+function LifeRing({ size }: { size: number }) {
+  // Life saver: a white ring with four red bands. The bands are dashes on one
+  // circle: 8 equal arcs of the circumference, alternating red and white.
+  const r = 21;
+  const arc = (2 * Math.PI * r) / 8;
   return (
-    <Svg viewBox="0 0 64 64" width={64} height={64}>
-      <Circle cx={32} cy={32} r={31} fill={colors.accent} stroke="#fff" strokeWidth={3} />
-      <Circle cx={32} cy={26} r={10} fill="#fde68a" />
-      <Path d="M12 56c2-14 12-18 20-18s18 4 20 18z" fill="#1e293b" />
-      <Path d="M26 40l6 8 6-8z" fill="#fff" />
+    <Svg viewBox="0 0 64 64" width={size} height={size}>
+      <Circle cx={32} cy={32} r={r} fill="none" stroke="#fff" strokeWidth={16} />
+      <Circle
+        cx={32}
+        cy={32}
+        r={r}
+        fill="none"
+        stroke="#e5484d"
+        strokeWidth={16}
+        strokeDasharray={`${arc} ${arc}`}
+        strokeDashoffset={arc / 2}
+      />
+      <Circle cx={32} cy={32} r={29} fill="none" stroke="#0f172a" strokeOpacity={0.35} strokeWidth={1.5} />
+      <Circle cx={32} cy={32} r={13} fill="none" stroke="#0f172a" strokeOpacity={0.35} strokeWidth={1.5} />
     </Svg>
   );
 }
@@ -125,12 +137,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderRadius: 999,
-    backgroundColor: colors.amber,
+    backgroundColor: "rgba(0,0,0,0.55)",
     paddingVertical: 8,
-    paddingLeft: 8,
+    paddingLeft: 10,
     paddingRight: 24,
   },
-  openerText: { fontSize: 20, fontWeight: "600", color: "#0f172a" },
+  openerText: { fontSize: 20, fontWeight: "600", color: "#fff" },
   bubbleButton: {
     minHeight: 56,
     justifyContent: "center",

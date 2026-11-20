@@ -14,8 +14,8 @@ type Modifier = {
 };
 
 const barrierIsland = {
-  /** Where each modifier rests when nobody is using the exhibit. */
-  neutralLevel: 0 as Level,
+  /** Where each modifier starts: everything on, levee at its highest. */
+  neutralLevel: 2 as Level,
   /** Wake -> reset to the calm loop after this long without a touch. */
   idleTimeoutMs: 45_000,
   /** How long the controller shows "simulating" before the result. */

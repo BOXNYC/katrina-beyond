@@ -147,12 +147,12 @@ export default function BarrierIslandKiosk() {
       {/* Messages live in the sky, above the horizon. */}
       <View style={[styles.sky, { height: skyH, paddingHorizontal: Math.min(width * 0.2, 200) }]} pointerEvents="box-none">
         {phase === "idle" && (
-          <Pressable onPress={wake} style={styles.fill} accessibilityRole="button">
+          <View style={styles.fill} pointerEvents="none">
             <Text style={[styles.title, { fontSize: 88 * u }]}>Barrier Island</Text>
             <Pulse>
               <Text style={[styles.prompt, { fontSize: 34 * u }]}>Touch to begin</Text>
             </Pulse>
-          </Pressable>
+          </View>
         )}
 
         {phase === "storm" && (
@@ -215,6 +215,16 @@ export default function BarrierIslandKiosk() {
           </View>
         )}
       </View>
+
+      {/* Touching anywhere on the screen starts the experience. */}
+      {phase === "idle" && (
+        <Pressable
+          onPress={wake}
+          style={StyleSheet.absoluteFill}
+          accessibilityRole="button"
+          accessibilityLabel="Touch to begin"
+        />
+      )}
 
       {phase !== "idle" && <HelpAgent key={phase} tips={[...tips[phase]]} />}
     </View>
